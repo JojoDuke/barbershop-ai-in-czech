@@ -293,7 +293,7 @@ export async function handleMessage(
       userState[from].slots = daySlots; // store all slots for later
       userState[from].step = "choose_slot";
       userState[from].slotPage = 1;
-      return `For ${serviceName} on ${dateLabel} we have slots available for:\n${slotList}\n\nReply with the time range you want, or type 'more' to show more available slots.`;
+      return `For ${serviceName} on ${dateLabel} we have slots available for (times shown in Prague timezone, UTC+2):\n${slotList}\n\nReply with the time range you want, or type 'more' to show more available slots.`;
     }
   }
 
