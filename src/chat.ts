@@ -243,8 +243,8 @@ export async function handleMessage(
       const dayEnd = requested!.endOf("day");
       const slotsData = await getAvailableSlots(
         state.serviceId,
-        dayStart.toISOString(),
-        dayEnd.toISOString()
+        dayStart.format(),
+        dayEnd.format()
       );
       let daySlots = slotsData?.data || [];
 
@@ -352,8 +352,8 @@ export async function handleMessage(
       const dayEnd = requested.endOf("day");
       const slotsData = await getAvailableSlots(
         state.serviceId,
-        dayStart.toISOString(),
-        dayEnd.toISOString()
+        dayStart.format(),
+        dayEnd.format()
       );
       let daySlots = slotsData?.data || [];
 

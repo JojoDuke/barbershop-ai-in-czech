@@ -1,7 +1,17 @@
 import axios from "axios";
 import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const API = "https://api.reservio.com/v2";
+
+const BUSINESS_TZ =
+  process.env.BUSINESS_TIMEZONE ||
+  process.env.RESERVIO_TIMEZONE ||
+  "Europe/Prague";
 
 const reservio = axios.create({
   baseURL: API,
@@ -60,9 +70,10 @@ export async function getAvailableSlots(
   to?: string
 ) {
   try {
-    // default window: start of today → end of +3 days
-    const fromIso = from ?? dayjs().startOf("day").toISOString();
-    const toIso = to ?? dayjs().add(3, "day").endOf("day").toISOString();
+    // default window: start of today → end of +3 days (in business timezone)
+    const fromIso = from ?? dayjs().tz(BUSINESS_TZ).startOf("day").format();
+    const toIso =
+      to ?? dayjs().tz(BUSINESS_TZ).add(3, "day").endOf("day").format();
 
     const { data } = await reservio.get(
       `/businesses/${process.env.BUSINESS_ID}/availability/booking-slots`,
