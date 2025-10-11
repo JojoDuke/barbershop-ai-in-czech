@@ -278,22 +278,25 @@ export async function handleMessage(
       const serviceName =
         state.chosenService?.attributes?.name || "the selected service";
       const dateLabel = requested!.format("D MMMM");
+
+      // Get timezone info dynamically
+      const tzName = BUSINESS_TZ;
+      const tzOffset = dayjs().tz(BUSINESS_TZ).format("Z");
+
       // Show first 10 slots in chronological order
       const initialSlots = daySlots.slice(0, 10);
       const slotList = initialSlots
-        .map(
-          (s: any) =>
-            `• ${dayjs
-              .tz(s.attributes.start, BUSINESS_TZ)
-              .format("HH:mm")} - ${dayjs
-              .tz(s.attributes.end, BUSINESS_TZ)
-              .format("HH:mm")}`
-        )
+        .map((s: any) => {
+          // Parse the ISO string first, then convert to business timezone
+          const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+          const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+          return `• ${startTime.format("HH:mm")} - ${endTime.format("HH:mm")}`;
+        })
         .join("\n");
       userState[from].slots = daySlots; // store all slots for later
       userState[from].step = "choose_slot";
       userState[from].slotPage = 1;
-      return `For ${serviceName} on ${dateLabel} we have slots available for (times shown in Prague timezone, UTC+2):\n${slotList}\n\nReply with the time range you want, or type 'more' to show more available slots.`;
+      return `For ${serviceName} on ${dateLabel} we have slots available for (times shown in ${tzName}, UTC${tzOffset}):\n${slotList}\n\nReply with the time range you want, or type 'more' to show more available slots.`;
     }
   }
 
@@ -331,14 +334,11 @@ export async function handleMessage(
         return `No more available slots for this date.`;
       }
       const slotList = nextSlots
-        .map(
-          (s: any) =>
-            `• ${dayjs
-              .tz(s.attributes.start, BUSINESS_TZ)
-              .format("HH:mm")} - ${dayjs
-              .tz(s.attributes.end, BUSINESS_TZ)
-              .format("HH:mm")}`
-        )
+        .map((s: any) => {
+          const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+          const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+          return `• ${startTime.format("HH:mm")} - ${endTime.format("HH:mm")}`;
+        })
         .join("\n");
       userState[from].slotPage = page + 1;
       userState[from].slots = slots; // Update with filtered slots
@@ -386,14 +386,11 @@ export async function handleMessage(
       // Show first 10 slots in chronological order for new date
       const initialSlots = daySlots.slice(0, 10);
       const slotList = initialSlots
-        .map(
-          (s: any) =>
-            `• ${dayjs
-              .tz(s.attributes.start, BUSINESS_TZ)
-              .format("HH:mm")} - ${dayjs
-              .tz(s.attributes.end, BUSINESS_TZ)
-              .format("HH:mm")}`
-        )
+        .map((s: any) => {
+          const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+          const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+          return `• ${startTime.format("HH:mm")} - ${endTime.format("HH:mm")}`;
+        })
         .join("\n");
       userState[from].slots = daySlots;
       userState[from].slotPage = 1;
@@ -455,10 +452,10 @@ export async function handleMessage(
       const endStr = rangeMatch[2];
       const slots = state.slots || [];
       const chosenSlot = slots.find((s: any) => {
-        const slotStart = dayjs
-          .tz(s.attributes.start, BUSINESS_TZ)
+        const slotStart = dayjs(s.attributes.start)
+          .tz(BUSINESS_TZ)
           .format("HH:mm");
-        const slotEnd = dayjs.tz(s.attributes.end, BUSINESS_TZ).format("HH:mm");
+        const slotEnd = dayjs(s.attributes.end).tz(BUSINESS_TZ).format("HH:mm");
         return slotStart === startStr && slotEnd === endStr;
       });
       if (!chosenSlot) {
@@ -479,8 +476,8 @@ export async function handleMessage(
       const timeStr = timeMatch[1];
       const slots = state.slots || [];
       const chosenSlot = slots.find((s: any) => {
-        const slotStart = dayjs
-          .tz(s.attributes.start, BUSINESS_TZ)
+        const slotStart = dayjs(s.attributes.start)
+          .tz(BUSINESS_TZ)
           .format("HH:mm");
         return slotStart === timeStr;
       });
