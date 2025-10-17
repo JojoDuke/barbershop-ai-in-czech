@@ -61,6 +61,7 @@ function tzOffsetLabel() {
   return dayjs.tz(dayjs(), BUSINESS_TZ).format("Z");
 }
 
+// Duration conversion stuff
 function formatDuration(seconds: number | undefined) {
   if (!seconds || typeof seconds !== "number") return "";
   const mins = Math.round(seconds / 60);
@@ -71,6 +72,8 @@ function formatDuration(seconds: number | undefined) {
   return `${hrs}h ${rem}m`;
 }
 
+
+// Getting services
 function buildServiceMenu(businessName: string, services: any[]) {
   const serviceList = services
     .map(
@@ -82,6 +85,8 @@ function buildServiceMenu(businessName: string, services: any[]) {
   return `Welcome to ${businessName}!\n\nPlease select a service from our menu:\n\n${serviceList}\n\nTo book your appointment, please reply with the exact name of the service you'd like.`;
 }
 
+
+// Date conversion stuff
 function parseRequestedDate(text: string): dayjs.Dayjs | null {
   // ISO format
   const iso = text.match(/(\d{4}-\d{2}-\d{2})/);
@@ -147,6 +152,8 @@ function parseRequestedDate(text: string): dayjs.Dayjs | null {
   return null;
 }
 
+
+// Generate Response from Open AI
 async function friendlyReply(
   systemPrompt: string,
   userPrompt: string
@@ -161,6 +168,8 @@ async function friendlyReply(
   return completion.choices[0].message?.content || userPrompt;
 }
 
+
+// Bot Logic
 export async function handleMessage(
   from: string,
   body: string
@@ -173,6 +182,8 @@ export async function handleMessage(
     delete userState[from];
   }
 
+
+  // Bot introduction after user texts the fist message
   if (!userState[from]) {
     const business = await getBusiness();
     const services = await getServices();
