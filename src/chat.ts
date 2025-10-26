@@ -53,7 +53,7 @@ function formatSlotFriendly(isoOrDay: string | dayjs.Dayjs) {
   const padded = String(dayNum).padStart(2, "0");
   const ord = ordinalSuffix(dayNum);
   const month = dt.format("MMMM");
-  const time = dt.format("HH:mm");
+  const time = dt.format("h:mm A");
   return `${weekday}, ${padded}${ord} ${month}, ${time}`;
 }
 
@@ -301,7 +301,7 @@ export async function handleMessage(
           // Parse the ISO string first, then convert to business timezone
           const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
           const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
-          return `• ${startTime.format("HH:mm")} - ${endTime.format("HH:mm")}`;
+          return `• ${startTime.format("h:mm A")} - ${endTime.format("h:mm A")}`;
         })
         .join("\n");
       userState[from].slots = daySlots; // store all slots for later
@@ -348,7 +348,7 @@ export async function handleMessage(
         .map((s: any) => {
           const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
           const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
-          return `• ${startTime.format("HH:mm")} - ${endTime.format("HH:mm")}`;
+          return `• ${startTime.format("h:mm A")} - ${endTime.format("h:mm A")}`;
         })
         .join("\n");
       userState[from].slotPage = page + 1;
@@ -400,7 +400,7 @@ export async function handleMessage(
         .map((s: any) => {
           const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
           const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
-          return `• ${startTime.format("HH:mm")} - ${endTime.format("HH:mm")}`;
+          return `• ${startTime.format("h:mm A")} - ${endTime.format("h:mm A")}`;
         })
         .join("\n");
       userState[from].slots = daySlots;
@@ -456,18 +456,27 @@ export async function handleMessage(
       );
     }
 
-    // try selection by time range (e.g. "13:00 - 13:30")
-    const rangeMatch = text.match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
+    // try selection by time range (e.g. "1:00 PM - 1:30 PM" or "13:00 - 13:30")
+    const rangeMatch = text.match(/(\d{1,2}:\d{2}\s*(?:AM|PM)?)\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
     if (rangeMatch) {
-      const startStr = rangeMatch[1];
-      const endStr = rangeMatch[2];
+      const startStr = rangeMatch[1].trim();
+      const endStr = rangeMatch[2].trim();
       const slots = state.slots || [];
       const chosenSlot = slots.find((s: any) => {
-        const slotStart = dayjs(s.attributes.start)
-          .tz(BUSINESS_TZ)
-          .format("HH:mm");
-        const slotEnd = dayjs(s.attributes.end).tz(BUSINESS_TZ).format("HH:mm");
-        return slotStart === startStr && slotEnd === endStr;
+        const slotStart = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+        const slotEnd = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+        
+        // Check both 12-hour and 24-hour formats
+        const slot12Start = slotStart.format("h:mm A");
+        const slot12End = slotEnd.format("h:mm A");
+        const slot24Start = slotStart.format("HH:mm");
+        const slot24End = slotEnd.format("HH:mm");
+        
+        return (
+          (slot12Start === startStr && slot12End === endStr) ||
+          (slot24Start === startStr && slot24End === endStr) ||
+          (slot12Start.toLowerCase() === startStr.toLowerCase() && slot12End.toLowerCase() === endStr.toLowerCase())
+        );
       });
       if (!chosenSlot) {
         return `I don't see that time range available. Please pick a time range from the list above, or type 'more' to show more slots.`;
@@ -481,16 +490,23 @@ export async function handleMessage(
       }. Please reply with your full name and email address to confirm the booking. (e.g. John Doe, john@example.com)`;
     }
 
-    // try selection by time (legacy, e.g. "13:00")
-    const timeMatch = text.match(/(\d{1,2}:\d{2})/);
+    // try selection by time (legacy, e.g. "1:00 PM" or "13:00")
+    const timeMatch = text.match(/(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
     if (timeMatch) {
-      const timeStr = timeMatch[1];
+      const timeStr = timeMatch[1].trim();
       const slots = state.slots || [];
       const chosenSlot = slots.find((s: any) => {
-        const slotStart = dayjs(s.attributes.start)
-          .tz(BUSINESS_TZ)
-          .format("HH:mm");
-        return slotStart === timeStr;
+        const slotStart = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+        
+        // Check both 12-hour and 24-hour formats
+        const slot12Start = slotStart.format("h:mm A");
+        const slot24Start = slotStart.format("HH:mm");
+        
+        return (
+          slot12Start === timeStr ||
+          slot24Start === timeStr ||
+          slot12Start.toLowerCase() === timeStr.toLowerCase()
+        );
       });
       if (!chosenSlot) {
         return `I don't see that time available. Please pick a time range from the list above, or type 'more' to show more slots.`;
@@ -583,8 +599,8 @@ export async function handleMessage(
         "You are a friendly barbershop assistant.",
         `Confirm to the user that their booking is successful.\nService: ${
           state.chosenService.attributes.name
-        }\nTime: ${dayjs(state.chosenSlot.attributes.start).format(
-          "dddd, HH:mm"
+        }\nTime: ${dayjs(state.chosenSlot.attributes.start).tz(BUSINESS_TZ).format(
+          "dddd, h:mm A"
         )}\nName: ${customerName}\nEmail: ${customerEmail}\nMake it sound warm and welcoming. Sign off with "Best regards, ${businessName} Team"`
       );
     } catch (error) {
