@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
+import "dayjs/locale/cs"; // Czech locale
 import OpenAI from "openai";
 import {
   createBooking,
@@ -9,9 +10,11 @@ import {
   getServices,
 } from "./reservio.js";
 import { upsertUser, createBookingRecord } from "./db.js";
+import { t, LANGUAGE } from "./translations.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+dayjs.locale(LANGUAGE); // Set locale based on LANGUAGE setting
 
 const BUSINESS_TZ =
   process.env.BUSINESS_TIMEZONE ||
@@ -82,7 +85,7 @@ function buildServiceMenu(businessName: string, services: any[]) {
     )
     .join("\n");
 
-  return `Welcome to ${businessName}!\n\nPlease select a service from our menu:\n\n${serviceList}\n\nTo book your appointment, please reply with the exact name of the service you'd like.`;
+  return `${t.welcome(businessName)}\n\n${t.selectService}\n\n${serviceList}\n\n${t.replyWithService}`;
 }
 
 
@@ -178,7 +181,7 @@ export async function handleMessage(
 
   // If user explicitly says a greeting or restart, clear their session so we always
   // show the fresh deterministic menu. This helps testing when userState is still in memory.
-  if (/^(hi|hello|hey|start|restart|menu)$/i.test(text)) {
+  if (/^(hi|hello|hey|start|restart|menu|ahoj|nazdar|dobrý den|začít|znovu)$/i.test(text)) {
     delete userState[from];
   }
 
@@ -214,7 +217,7 @@ export async function handleMessage(
     userState[from].services = services.data;
 
     // deterministic message
-    return `Here are the available services:\n${serviceList}\n\nPlease reply with the exact name of the service you'd like to book.`;
+    return `${t.availableServices}\n${serviceList}\n\n${t.replyWithExactName}`;
   }
 
   // Step 2 → choose service
@@ -234,13 +237,13 @@ export async function handleMessage(
         .join("\n");
 
       // deterministic error message
-      return `I couldn't find that service. Please select from our list:\n\n${serviceList}\n\nTo book your appointment, please reply with the exact name of the service you'd like.`;
+      return `${t.serviceNotFound}\n\n${serviceList}\n\n${t.replyWithService}`;
     }
 
     userState[from].chosenService = chosen;
     userState[from].serviceId = chosen.id;
     userState[from].step = "choose_date";
-    return `What date would you like to book your appointment? (e.g. 7th October)`;
+    return t.whatDate;
   }
 
   // Step 2b → choose date
@@ -248,7 +251,7 @@ export async function handleMessage(
     // Try to parse the date
     const requested = parseRequestedDate(text);
     if (!requested) {
-      return `Sorry, I couldn't understand the date. Please reply with a date like "7th October" or "2025-10-07".`;
+      return t.dateNotUnderstood;
     } else {
       const dayStart = requested!.startOf("day");
       const dayEnd = requested!.endOf("day");
@@ -281,9 +284,7 @@ export async function handleMessage(
       daySlots = uniqueSlots;
 
       if (daySlots.length === 0) {
-        return `Sorry — there are no available slots for ${requested!.format(
-          "dddd, DD MMMM YYYY"
-        )}.`;
+        return t.noSlotsAvailable(requested!.format("dddd, DD MMMM YYYY"));
       }
       // Format: For [Service] on [date] we have slots available for:
       const serviceName =
@@ -307,14 +308,14 @@ export async function handleMessage(
       userState[from].slots = daySlots; // store all slots for later
       userState[from].step = "choose_slot";
       userState[from].slotPage = 1;
-      return `For ${serviceName} on ${dateLabel} we have slots available for (times shown in ${tzName}, UTC${tzOffset}):\n${slotList}\n\nReply with the time range you want, or type 'more' to show more available slots.`;
+      return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset)}\n${slotList}\n\n${t.replyWithTime}`;
     }
   }
 
   // Step 3 → choose slot
   if (state.step === "choose_slot") {
     // detect "more" for additional slots for current date
-    if (/\b(more|other|additional|another)\b/i.test(text)) {
+    if (/\b(more|other|additional|another|více|další|jiné)\b/i.test(text)) {
       // Show next 10 slots (up to 20)
       let slots = state.slots || [];
 
@@ -342,7 +343,7 @@ export async function handleMessage(
       const page = state.slotPage || 1;
       const nextSlots = slots.slice(page * 10, (page + 1) * 10);
       if (nextSlots.length === 0) {
-        return `No more available slots for this date.`;
+        return t.noMoreSlots;
       }
       const slotList = nextSlots
         .map((s: any) => {
@@ -353,7 +354,7 @@ export async function handleMessage(
         .join("\n");
       userState[from].slotPage = page + 1;
       userState[from].slots = slots; // Update with filtered slots
-      return `More available slots for this date:\n${slotList}\n\nReply with the time you want, or type 'more' to show more available slots.`;
+      return `${t.moreSlots}\n${slotList}\n\n${t.replyWithTime}`;
     }
 
     // detect "slots for <date>"
@@ -390,9 +391,7 @@ export async function handleMessage(
       daySlots = uniqueSlots;
 
       if (daySlots.length === 0) {
-        return `Sorry — there are no available slots for ${requested.format(
-          "dddd, DD MMMM YYYY"
-        )}.`;
+        return t.noSlotsAvailable(requested.format("dddd, DD MMMM YYYY"));
       }
       // Show first 10 slots in chronological order for new date
       const initialSlots = daySlots.slice(0, 10);
@@ -405,9 +404,7 @@ export async function handleMessage(
         .join("\n");
       userState[from].slots = daySlots;
       userState[from].slotPage = 1;
-      return `Available slots for ${requested.format(
-        "dddd, DD MMMM YYYY"
-      )} (times shown in ${BUSINESS_TZ} ${tzOffsetLabel()}):\n${slotList}\n\nReply with the time you want, or type 'more' to show more available slots.`;
+      return `${t.availableSlotsFor(requested.format("dddd, DD MMMM YYYY"), BUSINESS_TZ, tzOffsetLabel())}:\n${slotList}\n\n${t.replyWithTime}`;
     }
 
     // handle general availability questions
@@ -436,7 +433,7 @@ export async function handleMessage(
       slots = uniqueSlots;
 
       if (slots.length === 0) {
-        return `Sorry — there are no more available slots for this date.`;
+        return t.noMoreSlots;
       }
 
       const PAGE = 5;
@@ -451,8 +448,8 @@ export async function handleMessage(
       userState[from].slots = slots; // Update with filtered slots
 
       return await friendlyReply(
-        "You are a friendly assistant.",
-        `Here are the available time slots (times shown in ${BUSINESS_TZ} ${tzOffsetLabel()}):\n${slotList}\n\nReply with the time you want, or type 'more' to show more available slots.`
+        t.systemPromptFriendly,
+        `Here are the available time slots (times shown in ${BUSINESS_TZ} ${tzOffsetLabel()}):\n${slotList}\n\n${t.replyWithTime}`
       );
     }
 
@@ -479,15 +476,14 @@ export async function handleMessage(
         );
       });
       if (!chosenSlot) {
-        return `I don't see that time range available. Please pick a time range from the list above, or type 'more' to show more slots.`;
+        return t.timeRangeNotAvailable;
       }
       userState[from].chosenSlot = chosenSlot;
       userState[from].step = "ask_contact";
-      return `You picked: ${formatSlotFriendly(
-        chosenSlot.attributes.start
-      )} for ${
+      return t.youPicked(
+        formatSlotFriendly(chosenSlot.attributes.start),
         state.chosenService.attributes.name
-      }. Please reply with your full name and email address to confirm the booking. (e.g. John Doe, john@example.com)`;
+      );
     }
 
     // try selection by time (legacy, e.g. "1:00 PM" or "13:00")
@@ -509,15 +505,14 @@ export async function handleMessage(
         );
       });
       if (!chosenSlot) {
-        return `I don't see that time available. Please pick a time range from the list above, or type 'more' to show more slots.`;
+        return t.timeNotAvailable;
       }
       userState[from].chosenSlot = chosenSlot;
       userState[from].step = "ask_contact";
-      return `You picked: ${formatSlotFriendly(
-        chosenSlot.attributes.start
-      )} for ${
+      return t.youPicked(
+        formatSlotFriendly(chosenSlot.attributes.start),
         state.chosenService.attributes.name
-      }. Please reply with your full name and email address to confirm the booking. (e.g. John Doe, john@example.com)`;
+      );
     }
 
     // try selection by number (legacy)
@@ -525,16 +520,15 @@ export async function handleMessage(
     const slots = state.slots || [];
     const chosenSlot = slots[index];
     if (!chosenSlot) {
-      return `I don't see that slot number. Please pick a time from the list above, or type 'more' to show more slots.`;
+      return t.slotNumberNotFound;
     }
 
     userState[from].chosenSlot = chosenSlot;
     userState[from].step = "ask_contact";
-    return `You picked: ${formatSlotFriendly(
-      chosenSlot.attributes.start
-    )} for ${
+    return t.youPicked(
+      formatSlotFriendly(chosenSlot.attributes.start),
       state.chosenService.attributes.name
-    }. Please reply with your full name and email address to confirm the booking. (e.g. John Doe, john@example.com)`;
+    );
   }
 
   // Step 4a → ask for contact details
@@ -544,20 +538,20 @@ export async function handleMessage(
       .trim()
       .match(/^([^,]+),\s*([\w.-]+@[\w.-]+\.[A-Za-z]{2,})$/);
     if (!contactMatch) {
-      return `Please reply with your full name and email address, separated by a comma. (e.g. John Doe, john@example.com)`;
+      return t.provideNameEmail;
     }
     const customerName = contactMatch[1].trim();
     const customerEmail = contactMatch[2].trim();
     userState[from].customerName = customerName;
     userState[from].customerEmail = customerEmail;
     userState[from].step = "confirm_booking";
-    return `Thank you, ${customerName}! Please confirm you want to book this slot for ${customerEmail} by replying 'yes'.`;
+    return t.confirmBooking(customerName, customerEmail);
   }
 
   // Step 4b → confirm booking
   if (state.step === "confirm_booking") {
-    if (!/^yes$/i.test(body.trim())) {
-      return `Please reply 'yes' to confirm your booking, or 'no' to cancel.`;
+    if (!/^(yes|ano)$/i.test(body.trim())) {
+      return t.replyYesToConfirm;
     }
 
     const customerName = state.customerName;
@@ -596,22 +590,24 @@ export async function handleMessage(
       const businessName = business?.data?.attributes?.name || "our shop";
 
       return await friendlyReply(
-        "You are a friendly barbershop assistant.",
-        `Confirm to the user that their booking is successful.\nService: ${
-          state.chosenService.attributes.name
-        }\nTime: ${dayjs(state.chosenSlot.attributes.start).tz(BUSINESS_TZ).format(
-          "dddd, h:mm A"
-        )}\nName: ${customerName}\nEmail: ${customerEmail}\nMake it sound warm and welcoming. Sign off with "Best regards, ${businessName} Team"`
+        t.systemPromptBarbershop,
+        t.bookingSuccessPrompt(
+          state.chosenService.attributes.name,
+          dayjs(state.chosenSlot.attributes.start).tz(BUSINESS_TZ).format("dddd, h:mm A"),
+          customerName,
+          customerEmail,
+          businessName
+        )
       );
     } catch (error) {
       console.error("Error creating booking:", error);
-      return `Sorry, there was an error creating your booking. Please try again or contact us directly.`;
+      return t.bookingError;
     }
   }
 
   // fallback
   return await friendlyReply(
-    "You are an assistant.",
-    "Tell the user you didn’t understand and that they can type 'hi' to start again."
+    t.systemPromptGeneral,
+    t.didntUnderstand
   );
 }
