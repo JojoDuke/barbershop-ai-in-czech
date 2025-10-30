@@ -205,6 +205,30 @@ function parseRequestedDate(text: string): dayjs.Dayjs | null {
     return dayjs.tz(dateStr, BUSINESS_TZ);
   }
 
+  // Czech space format (e.g. "30 10", "30 10 2025", "7 11")
+  // Must be 2 numbers separated by space, optionally followed by year
+  const czechSpace = text.match(/\b(\d{1,2})\s+(\d{1,2})(?:\s+(\d{2,4}))?\b/);
+  if (czechSpace) {
+    const day = czechSpace[1];
+    const month = czechSpace[2];
+    let year = czechSpace[3];
+    
+    // Only process if it looks like a date (month 1-12, day 1-31)
+    const dayNum = parseInt(day);
+    const monthNum = parseInt(month);
+    if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12) {
+      // Handle 2-digit year
+      if (year && year.length === 2) {
+        year = `20${year}`;
+      } else if (!year) {
+        year = String(dayjs().year());
+      }
+      
+      const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      return dayjs.tz(dateStr, BUSINESS_TZ);
+    }
+  }
+
   // Slash or dash format
   const slash = text.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
   if (slash) return dayjs(slash[1], ["DD/MM/YYYY", "D/M/YYYY", "MM/DD/YYYY"]);

@@ -14,8 +14,8 @@ export const translations = {
     serviceNotFound: "I couldn't find that service. Please select from our list:",
     
     // Date Selection
-    whatDate: "What date would you like to book your appointment? (e.g., tomorrow, next Friday, 7th October, or any date)",
-    dateNotUnderstood: "Sorry, I couldn't understand that date. Please try again with any date format you prefer (e.g., tomorrow, next Tuesday, October 7th, 7.10., etc.)",
+    whatDate: "What date would you like to book your appointment? (e.g., tomorrow, next Friday, 30.10., 30 10, or any date)",
+    dateNotUnderstood: "Sorry, I couldn't understand that date. Please try again with any date format you prefer (e.g., tomorrow, next Tuesday, 30.10., 30 10, etc.)",
     noSlotsAvailable: (date: string) => `Sorry — there are no available slots for ${date}.`,
     noSlotsPastDate: (date: string) => `Sorry — ${date} has already passed. Please choose a future date.`,
     noSlotsWeekend: (date: string) => `Sorry — we're closed on ${date}. We're only open on weekdays. Please choose a weekday.`,
@@ -70,8 +70,8 @@ export const translations = {
     serviceNotFound: "Nemohl jsem najít tuto službu. Prosím vyberte ze seznamu:",
     
     // Výběr data
-    whatDate: "Jaké datum byste chtěli rezervovat? (např. zítra, příští pátek, 7. října, 30.10., nebo jakékoliv datum)",
-    dateNotUnderstood: "Omlouváme se, datum jsem nepochopil. Zkuste to prosím znovu s libovolným formátem data (např. zítra, příští úterý, 7. října, 30.10., atd.)",
+    whatDate: "Jaké datum byste chtěli rezervovat? (např. zítra, příští pátek, 30.10., 30 10, nebo jakékoliv datum)",
+    dateNotUnderstood: "Omlouváme se, datum jsem nepochopil. Zkuste to prosím znovu s libovolným formátem data (např. zítra, příští úterý, 30.10., 30 10, atd.)",
     noSlotsAvailable: (date: string) => `Omlouváme se — pro ${date} nejsou žádné volné termíny.`,
     noSlotsPastDate: (date: string) => `Omlouváme se — ${date} již prošlo. Prosím vyberte budoucí datum.`,
     noSlotsWeekend: (date: string) => `Omlouváme se — v ${date} máme zavřeno. Jsme otevřeni pouze ve všední dny. Prosím vyberte všední den.`,
