@@ -17,6 +17,10 @@ export const translations = {
     whatDate: "What date would you like to book your appointment? (e.g., tomorrow, next Friday, 7th October, or any date)",
     dateNotUnderstood: "Sorry, I couldn't understand that date. Please try again with any date format you prefer (e.g., tomorrow, next Tuesday, October 7th, 7.10., etc.)",
     noSlotsAvailable: (date: string) => `Sorry — there are no available slots for ${date}.`,
+    noSlotsPastDate: (date: string) => `Sorry — ${date} has already passed. Please choose a future date.`,
+    noSlotsWeekend: (date: string) => `Sorry — we're closed on ${date}. We're only open on weekdays. Please choose a weekday.`,
+    noSlotsAllPast: (date: string) => `Sorry — all slots for today have already passed. Please choose a later time or another day.`,
+    noSlotsFullyBooked: (date: string) => `Sorry — all slots for ${date} are fully booked. Please choose another day.`,
     slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
       `For ${service} on ${date} we have slots available for (times shown in ${tz}, UTC${offset}):`,
     replyWithTime: "Reply with the time range you want, or type 'more' to show more available slots.",
@@ -69,6 +73,10 @@ export const translations = {
     whatDate: "Jaké datum byste chtěli rezervovat? (např. zítra, příští pátek, 7. října, 30.10., nebo jakékoliv datum)",
     dateNotUnderstood: "Omlouváme se, datum jsem nepochopil. Zkuste to prosím znovu s libovolným formátem data (např. zítra, příští úterý, 7. října, 30.10., atd.)",
     noSlotsAvailable: (date: string) => `Omlouváme se — pro ${date} nejsou žádné volné termíny.`,
+    noSlotsPastDate: (date: string) => `Omlouváme se — ${date} již prošlo. Prosím vyberte budoucí datum.`,
+    noSlotsWeekend: (date: string) => `Omlouváme se — v ${date} máme zavřeno. Jsme otevřeni pouze ve všední dny. Prosím vyberte všední den.`,
+    noSlotsAllPast: (date: string) => `Omlouváme se — všechny dnešní termíny již prošly. Prosím vyberte pozdější čas nebo jiný den.`,
+    noSlotsFullyBooked: (date: string) => `Omlouváme se — všechny termíny pro ${date} jsou obsazené. Prosím vyberte jiný den.`,
     slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
       `Pro ${service} dne ${date} máme volné termíny (časy zobrazeny v ${tz}, UTC${offset}):`,
     replyWithTime: "Odpovězte časem, který chcete, nebo napište 'více' pro zobrazení dalších volných termínů.",

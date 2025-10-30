@@ -44,6 +44,39 @@ function ordinalSuffix(n: number) {
   }
 }
 
+// Explain why there are no slots available
+function explainNoSlots(
+  requestedDate: dayjs.Dayjs,
+  allSlots: any[],
+  filteredSlots: any[]
+): string {
+  const now = dayjs();
+  const dateStr = requestedDate.format("dddd, DD MMMM YYYY");
+  const dayOfWeek = requestedDate.day();
+  
+  // Check if date is in the past
+  if (requestedDate.isBefore(now, "day")) {
+    return t.noSlotsPastDate(dateStr);
+  }
+  
+  // Check if it's a weekend (Saturday = 6, Sunday = 0)
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return t.noSlotsWeekend(dateStr);
+  }
+  
+  // Check if there were slots but they're all in the past (fully booked or day has passed)
+  if (allSlots.length > 0 && filteredSlots.length === 0) {
+    if (requestedDate.isSame(now, "day")) {
+      return t.noSlotsAllPast(dateStr);
+    } else {
+      return t.noSlotsFullyBooked(dateStr);
+    }
+  }
+  
+  // No slots at all for this day (business closed or not accepting bookings)
+  return t.noSlotsAvailable(dateStr);
+}
+
 function formatSlotFriendly(isoOrDay: string | dayjs.Dayjs) {
   // ensure we interpret and display in the business timezone
   const dt =
@@ -411,11 +444,11 @@ export async function handleMessage(
         dayStart.format(),
         dayEnd.format()
       );
-      let daySlots = slotsData?.data || [];
+      const allSlots = slotsData?.data || [];
 
       // Filter out past slots (double-check in case time has passed)
       const now = dayjs();
-      daySlots = daySlots.filter((slot: any) =>
+      let daySlots = allSlots.filter((slot: any) =>
         dayjs(slot.attributes.start).isAfter(now)
       );
 
@@ -435,7 +468,7 @@ export async function handleMessage(
       daySlots = uniqueSlots;
 
       if (daySlots.length === 0) {
-        return t.noSlotsAvailable(requested!.format("dddd, DD MMMM YYYY"));
+        return explainNoSlots(requested!, allSlots, daySlots);
       }
       // Format: For [Service] on [date] we have slots available for:
       const serviceName =
@@ -522,11 +555,11 @@ export async function handleMessage(
         dayStart.format(),
         dayEnd.format()
       );
-      let daySlots = slotsData?.data || [];
+      const allSlots = slotsData?.data || [];
 
       // Filter out past slots (double-check in case time has passed)
       const now = dayjs();
-      daySlots = daySlots.filter((slot: any) =>
+      let daySlots = allSlots.filter((slot: any) =>
         dayjs(slot.attributes.start).isAfter(now)
       );
 
@@ -546,7 +579,7 @@ export async function handleMessage(
       daySlots = uniqueSlots;
 
       if (daySlots.length === 0) {
-        return t.noSlotsAvailable(requested.format("dddd, DD MMMM YYYY"));
+        return explainNoSlots(requested, allSlots, daySlots);
       }
       // Show first 10 slots in chronological order for new date
       const initialSlots = daySlots.slice(0, 10);
