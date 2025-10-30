@@ -98,9 +98,11 @@ TODAY'S DATE: ${today.format("YYYY-MM-DD")} (${today.format("dddd, D MMMM YYYY")
 
 CRITICAL RULES:
 - Return ONLY the date in YYYY-MM-DD format, nothing else
-- "tomorrow"/"zítra" = ${today.add(1, 'day').format("YYYY-MM-DD")}
-- "today"/"dnes" = ${today.format("YYYY-MM-DD")}
-- "day after tomorrow"/"pozítří" = ${today.add(2, 'day').format("YYYY-MM-DD")}
+- "tomorrow"/"zítra"/"zitra" = ${today.add(1, 'day').format("YYYY-MM-DD")}
+- "today"/"dnes"/"dneska" = ${today.format("YYYY-MM-DD")}
+- "day after tomorrow"/"pozítří"/"pozitri" = ${today.add(2, 'day').format("YYYY-MM-DD")}
+- Czech months work with or without diacritics (e.g. "rijna" = "října" = October)
+- Czech weekdays work with or without diacritics (e.g. "patek" = "pátek" = Friday)
 - For "next [weekday]", find the next occurrence of that weekday
 - For "in X days", add X days to today
 - For "this [weekday]", find the nearest upcoming occurrence
@@ -175,25 +177,26 @@ function parseRequestedDate(text: string): dayjs.Dayjs | null {
   if (slash) return dayjs(slash[1], ["DD/MM/YYYY", "D/M/YYYY", "MM/DD/YYYY"]);
 
   // Czech month names (e.g. "30. října", "30 října", "října 30")
-  const czechMonthPattern = /(\d{1,2})\.?\s+(ledna|února|března|dubna|května|června|července|srpna|září|října|listopadu|prosince)(?:\s+(\d{4}))?/i;
+  // Support both with and without diacritics for better compatibility
+  const czechMonthPattern = /(\d{1,2})\.?\s+(ledna|unora|února|brezna|března|dubna|kvetna|května|cervna|června|července|cervence|srpna|zari|září|rijna|října|listopadu|prosince)(?:\s+(\d{4}))?/i;
   const czechMonth = text.match(czechMonthPattern);
   if (czechMonth) {
     const day = czechMonth[1];
     const monthName = czechMonth[2].toLowerCase();
     const year = czechMonth[3] || String(dayjs().year());
     
-    // Map Czech month names to numbers
+    // Map Czech month names to numbers (with and without diacritics)
     const czechMonths: Record<string, string> = {
       'ledna': '01',
-      'února': '02',
-      'března': '03',
+      'února': '02', 'unora': '02',
+      'března': '03', 'brezna': '03',
       'dubna': '04',
-      'května': '05',
-      'června': '06',
-      'července': '07',
+      'května': '05', 'kvetna': '05',
+      'června': '06', 'cervna': '06',
+      'července': '07', 'cervence': '07',
       'srpna': '08',
-      'září': '09',
-      'října': '10',
+      'září': '09', 'zari': '09',
+      'října': '10', 'rijna': '10',
       'listopadu': '11',
       'prosince': '12'
     };
@@ -247,14 +250,14 @@ function parseRequestedDate(text: string): dayjs.Dayjs | null {
   if (/\btoday\b/i.test(text))
     return dayjs.tz(dayjs().toISOString(), BUSINESS_TZ).startOf("day");
 
-  // Czech weekday names
+  // Czech weekday names (with and without diacritics)
   const czechWeekdayMatch = text.match(
-    /\b(pondělí|pondelí|pondeli|úterý|utery|úterý|středa|streda|čtvrtek|ctvrtek|pátek|patek|sobota|sobotu|neděle|nedele)\b/i
+    /\b(pondělí|pondeli|pondelí|úterý|utery|uterý|středa|streda|čtvrtek|ctvrtek|pátek|patek|sobota|sobotu|neděle|nedele)\b/i
   );
   if (czechWeekdayMatch) {
     const czechWeekdays: Record<string, number> = {
       'pondělí': 1, 'pondelí': 1, 'pondeli': 1,
-      'úterý': 2, 'utery': 2, 'úterý': 2,
+      'úterý': 2, 'utery': 2, 'uterý': 2,
       'středa': 3, 'streda': 3,
       'čtvrtek': 4, 'ctvrtek': 4,
       'pátek': 5, 'patek': 5,
