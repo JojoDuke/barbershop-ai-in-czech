@@ -89,25 +89,30 @@ function buildServiceMenu(businessName: string, services: any[]) {
 }
 
 
-// AI-powered date parsing
+// AI-powered date parsing (for complex natural language only)
 async function parseRequestedDateWithAI(text: string): Promise<dayjs.Dayjs | null> {
   const today = dayjs.tz(dayjs(), BUSINESS_TZ);
-  const systemPrompt = `You are a date parser. Extract the requested date from user input and return it in ISO format (YYYY-MM-DD).
+  const systemPrompt = `You are a precise date parser. Extract the requested date from natural language input and return ONLY in ISO format (YYYY-MM-DD).
 
-Current date: ${today.format("YYYY-MM-DD")} (${today.format("dddd, D MMMM YYYY")})
+TODAY'S DATE: ${today.format("YYYY-MM-DD")} (${today.format("dddd, D MMMM YYYY")})
 
-Rules:
-- If user says just a day number (e.g. "30", "7"), assume current month/year unless it's in the past, then use next month
-- "tomorrow" = ${today.add(1, 'day').format("YYYY-MM-DD")}
-- "today" = ${today.format("YYYY-MM-DD")}
-- "zítra" (Czech) = tomorrow
-- "dnes" (Czech) = today
-- For weekdays like "Friday", find the next occurrence
-- Handle relative dates like "in 3 days", "next week"
-- Handle Czech dates like "30.10." or "30. října"
-- If the date is ambiguous or unclear, return "UNCLEAR"
+CRITICAL RULES:
+- Return ONLY the date in YYYY-MM-DD format, nothing else
+- "tomorrow"/"zítra" = ${today.add(1, 'day').format("YYYY-MM-DD")}
+- "today"/"dnes" = ${today.format("YYYY-MM-DD")}
+- "day after tomorrow"/"pozítří" = ${today.add(2, 'day').format("YYYY-MM-DD")}
+- For "next [weekday]", find the next occurrence of that weekday
+- For "in X days", add X days to today
+- For "this [weekday]", find the nearest upcoming occurrence
+- If unclear or ambiguous, return "UNCLEAR"
+- NEVER guess - if unsure, return "UNCLEAR"
 
-Respond with ONLY the date in YYYY-MM-DD format, nothing else.`;
+Examples:
+- "tomorrow afternoon" → ${today.add(1, 'day').format("YYYY-MM-DD")}
+- "next Friday" → [calculate next Friday from ${today.format("YYYY-MM-DD")}]
+- "in 3 days" → ${today.add(3, 'day').format("YYYY-MM-DD")}
+
+RESPOND WITH ONLY THE DATE: YYYY-MM-DD`;
 
   try {
     const completion = await client.chat.completions.create({
@@ -386,10 +391,11 @@ export async function handleMessage(
 
   // Step 2b → choose date
   if (state.step === "choose_date") {
-    // Try AI-powered date parsing first, then fallback to regex
-    let requested = await parseRequestedDateWithAI(text);
+    // Try regex-based parsing first (fast & reliable for standard formats)
+    // Then fallback to AI for complex natural language
+    let requested = parseRequestedDate(text);
     if (!requested) {
-      requested = parseRequestedDate(text);
+      requested = await parseRequestedDateWithAI(text);
     }
     
     if (!requested) {
@@ -500,9 +506,10 @@ export async function handleMessage(
     }
 
     // detect "slots for <date>"
-    let requested = await parseRequestedDateWithAI(text);
+    // Try regex first, then AI fallback
+    let requested = parseRequestedDate(text);
     if (!requested) {
-      requested = parseRequestedDate(text);
+      requested = await parseRequestedDateWithAI(text);
     }
     if (requested) {
       const dayStart = requested.startOf("day");
