@@ -89,17 +89,118 @@ function buildServiceMenu(businessName: string, services: any[]) {
 }
 
 
-// Date conversion stuff
+// AI-powered date parsing
+async function parseRequestedDateWithAI(text: string): Promise<dayjs.Dayjs | null> {
+  const today = dayjs.tz(dayjs(), BUSINESS_TZ);
+  const systemPrompt = `You are a date parser. Extract the requested date from user input and return it in ISO format (YYYY-MM-DD).
+
+Current date: ${today.format("YYYY-MM-DD")} (${today.format("dddd, D MMMM YYYY")})
+
+Rules:
+- If user says just a day number (e.g. "30", "7"), assume current month/year unless it's in the past, then use next month
+- "tomorrow" = ${today.add(1, 'day').format("YYYY-MM-DD")}
+- "today" = ${today.format("YYYY-MM-DD")}
+- "zítra" (Czech) = tomorrow
+- "dnes" (Czech) = today
+- For weekdays like "Friday", find the next occurrence
+- Handle relative dates like "in 3 days", "next week"
+- Handle Czech dates like "30.10." or "30. října"
+- If the date is ambiguous or unclear, return "UNCLEAR"
+
+Respond with ONLY the date in YYYY-MM-DD format, nothing else.`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Extract date from: "${text}"` },
+      ],
+      temperature: 0,
+    });
+
+    const response = completion.choices[0].message?.content?.trim();
+    if (!response || response === "UNCLEAR") {
+      return null;
+    }
+
+    // Validate it's a proper date format
+    const dateMatch = response.match(/(\d{4}-\d{2}-\d{2})/);
+    if (dateMatch) {
+      const parsed = dayjs.tz(dateMatch[1], BUSINESS_TZ);
+      // Make sure it's a valid date and not in the past
+      if (parsed.isValid()) {
+        return parsed.startOf("day");
+      }
+    }
+  } catch (error) {
+    console.error("AI date parsing error:", error);
+    // Fall through to regex-based parsing
+  }
+
+  return null;
+}
+
+// Date conversion stuff (fallback regex-based parsing)
 function parseRequestedDate(text: string): dayjs.Dayjs | null {
   // ISO format
   const iso = text.match(/(\d{4}-\d{2}-\d{2})/);
   if (iso) return dayjs.tz(iso[1], BUSINESS_TZ);
 
+  // Czech dot format (e.g. "30.10.", "30. 10.", "30.10.2025")
+  const czechDot = text.match(/(\d{1,2})\.\s*(\d{1,2})\.(?:\s*(\d{2,4}))?/);
+  if (czechDot) {
+    const day = czechDot[1];
+    const month = czechDot[2];
+    let year = czechDot[3];
+    
+    // Handle 2-digit year
+    if (year && year.length === 2) {
+      year = `20${year}`;
+    } else if (!year) {
+      year = String(dayjs().year());
+    }
+    
+    const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    return dayjs.tz(dateStr, BUSINESS_TZ);
+  }
+
   // Slash or dash format
   const slash = text.match(/(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/);
   if (slash) return dayjs(slash[1], ["DD/MM/YYYY", "D/M/YYYY", "MM/DD/YYYY"]);
 
-  // Ordinal or month name format (e.g. '8th October', '7 October', 'October 8', '8 October 2025')
+  // Czech month names (e.g. "30. října", "30 října", "října 30")
+  const czechMonthPattern = /(\d{1,2})\.?\s+(ledna|února|března|dubna|května|června|července|srpna|září|října|listopadu|prosince)(?:\s+(\d{4}))?/i;
+  const czechMonth = text.match(czechMonthPattern);
+  if (czechMonth) {
+    const day = czechMonth[1];
+    const monthName = czechMonth[2].toLowerCase();
+    const year = czechMonth[3] || String(dayjs().year());
+    
+    // Map Czech month names to numbers
+    const czechMonths: Record<string, string> = {
+      'ledna': '01',
+      'února': '02',
+      'března': '03',
+      'dubna': '04',
+      'května': '05',
+      'června': '06',
+      'července': '07',
+      'srpna': '08',
+      'září': '09',
+      'října': '10',
+      'listopadu': '11',
+      'prosince': '12'
+    };
+    
+    const month = czechMonths[monthName];
+    if (month) {
+      const dateStr = `${year}-${month}-${day.padStart(2, '0')}`;
+      return dayjs.tz(dateStr, BUSINESS_TZ);
+    }
+  }
+
+  // English month names (e.g. '8th October', '7 October', 'October 8', '8 October 2025')
   const ordinal = text.match(
     /(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?/i
   );
@@ -121,7 +222,19 @@ function parseRequestedDate(text: string): dayjs.Dayjs | null {
     return dayjs.tz(dateStr, "D MMMM YYYY", BUSINESS_TZ);
   }
 
-  // Relative days
+  // Czech relative days
+  if (/\b(zítra|zitra)\b/i.test(text))
+    return dayjs
+      .tz(dayjs().add(1, "day").toISOString(), BUSINESS_TZ)
+      .startOf("day");
+  if (/\b(dnes|dneska)\b/i.test(text))
+    return dayjs.tz(dayjs().toISOString(), BUSINESS_TZ).startOf("day");
+  if (/\b(pozítří|pozitri|pozítři|pozitří)\b/i.test(text))
+    return dayjs
+      .tz(dayjs().add(2, "day").toISOString(), BUSINESS_TZ)
+      .startOf("day");
+
+  // English relative days
   if (/\btomorrow\b/i.test(text))
     return dayjs
       .tz(dayjs().add(1, "day").toISOString(), BUSINESS_TZ)
@@ -129,7 +242,32 @@ function parseRequestedDate(text: string): dayjs.Dayjs | null {
   if (/\btoday\b/i.test(text))
     return dayjs.tz(dayjs().toISOString(), BUSINESS_TZ).startOf("day");
 
-  // Weekday name
+  // Czech weekday names
+  const czechWeekdayMatch = text.match(
+    /\b(pondělí|pondelí|pondeli|úterý|utery|úterý|středa|streda|čtvrtek|ctvrtek|pátek|patek|sobota|sobotu|neděle|nedele)\b/i
+  );
+  if (czechWeekdayMatch) {
+    const czechWeekdays: Record<string, number> = {
+      'pondělí': 1, 'pondelí': 1, 'pondeli': 1,
+      'úterý': 2, 'utery': 2, 'úterý': 2,
+      'středa': 3, 'streda': 3,
+      'čtvrtek': 4, 'ctvrtek': 4,
+      'pátek': 5, 'patek': 5,
+      'sobota': 6, 'sobotu': 6,
+      'neděle': 0, 'nedele': 0
+    };
+    const dayName = czechWeekdayMatch[1].toLowerCase();
+    const targetWeekday = czechWeekdays[dayName];
+    if (targetWeekday !== undefined) {
+      let t = dayjs.tz(dayjs().toISOString(), BUSINESS_TZ);
+      for (let i = 0; i < 7; i++) {
+        if (t.day() === targetWeekday) return t.startOf("day");
+        t = t.add(1, "day");
+      }
+    }
+  }
+
+  // English weekday names
   const weekdayMatch = text.match(
     /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i
   );
@@ -162,7 +300,7 @@ async function friendlyReply(
   userPrompt: string
 ): Promise<string> {
   const completion = await client.chat.completions.create({
-    model: "gpt-4.1",
+    model: "gpt-5",  // Using GPT-5 for best natural language understanding
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -248,8 +386,12 @@ export async function handleMessage(
 
   // Step 2b → choose date
   if (state.step === "choose_date") {
-    // Try to parse the date
-    const requested = parseRequestedDate(text);
+    // Try AI-powered date parsing first, then fallback to regex
+    let requested = await parseRequestedDateWithAI(text);
+    if (!requested) {
+      requested = parseRequestedDate(text);
+    }
+    
     if (!requested) {
       return t.dateNotUnderstood;
     } else {
@@ -358,7 +500,10 @@ export async function handleMessage(
     }
 
     // detect "slots for <date>"
-    const requested = parseRequestedDate(text);
+    let requested = await parseRequestedDateWithAI(text);
+    if (!requested) {
+      requested = parseRequestedDate(text);
+    }
     if (requested) {
       const dayStart = requested.startOf("day");
       const dayEnd = requested.endOf("day");

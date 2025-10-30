@@ -14,8 +14,8 @@ export const translations = {
     serviceNotFound: "I couldn't find that service. Please select from our list:",
     
     // Date Selection
-    whatDate: "What date would you like to book your appointment? (e.g. 7th October)",
-    dateNotUnderstood: "Sorry, I couldn't understand the date. Please reply with a date like \"7th October\" or \"2025-10-07\".",
+    whatDate: "What date would you like to book your appointment? (e.g., tomorrow, next Friday, 7th October, or any date)",
+    dateNotUnderstood: "Sorry, I couldn't understand that date. Please try again with any date format you prefer (e.g., tomorrow, next Tuesday, October 7th, 7.10., etc.)",
     noSlotsAvailable: (date: string) => `Sorry — there are no available slots for ${date}.`,
     slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
       `For ${service} on ${date} we have slots available for (times shown in ${tz}, UTC${offset}):`,
@@ -66,8 +66,8 @@ export const translations = {
     serviceNotFound: "Nemohl jsem najít tuto službu. Prosím vyberte ze seznamu:",
     
     // Výběr data
-    whatDate: "Jaké datum byste chtěli rezervovat? (např. 7. října)",
-    dateNotUnderstood: "Omlouváme se, datum jsem nepochopil. Prosím odpovězte datem jako \"7. října\" nebo \"2025-10-07\".",
+    whatDate: "Jaké datum byste chtěli rezervovat? (např. zítra, příští pátek, 7. října, 30.10., nebo jakékoliv datum)",
+    dateNotUnderstood: "Omlouváme se, datum jsem nepochopil. Zkuste to prosím znovu s libovolným formátem data (např. zítra, příští úterý, 7. října, 30.10., atd.)",
     noSlotsAvailable: (date: string) => `Omlouváme se — pro ${date} nejsou žádné volné termíny.`,
     slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
       `Pro ${service} dne ${date} máme volné termíny (časy zobrazeny v ${tz}, UTC${offset}):`,
