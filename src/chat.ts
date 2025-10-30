@@ -59,18 +59,19 @@ function explainNoSlots(
     return t.noSlotsPastDate(dateStr);
   }
   
+  // Check if it's TODAY specifically - all slots likely passed
+  if (requestedDate.isSame(now, "day")) {
+    return t.noSlotsAllPast(dateStr);
+  }
+  
   // Check if it's a weekend (Saturday = 6, Sunday = 0)
   if (dayOfWeek === 0 || dayOfWeek === 6) {
     return t.noSlotsWeekend(dateStr);
   }
   
-  // Check if there were slots but they're all in the past (fully booked or day has passed)
+  // Check if there were slots but they're all booked/taken
   if (allSlots.length > 0 && filteredSlots.length === 0) {
-    if (requestedDate.isSame(now, "day")) {
-      return t.noSlotsAllPast(dateStr);
-    } else {
-      return t.noSlotsFullyBooked(dateStr);
-    }
+    return t.noSlotsFullyBooked(dateStr);
   }
   
   // No slots at all for this day (business closed or not accepting bookings)
