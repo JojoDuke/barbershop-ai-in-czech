@@ -79,11 +79,15 @@ function explainNoSlots(
 }
 
 function formatSlotFriendly(isoOrDay: string | dayjs.Dayjs) {
-  // ensure we interpret and display in the business timezone
-  const dt =
-    typeof isoOrDay === "string"
-      ? dayjs.tz(isoOrDay, BUSINESS_TZ)
-      : dayjs.tz(isoOrDay.toISOString(), BUSINESS_TZ);
+  // Parse the ISO string (which includes timezone info) then convert to business timezone
+  let dt: dayjs.Dayjs;
+  if (typeof isoOrDay === "string") {
+    // Parse ISO string (handles UTC or other timezone info) then convert to business TZ
+    dt = dayjs(isoOrDay).tz(BUSINESS_TZ);
+  } else {
+    // Already a dayjs object, convert to business TZ
+    dt = isoOrDay.tz(BUSINESS_TZ);
+  }
 
   const weekday = dt.format("dddd");
   const dayNum = dt.date();
