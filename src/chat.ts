@@ -113,6 +113,60 @@ function formatDuration(seconds: number | undefined) {
   return `${hrs}h ${rem}m`;
 }
 
+// AI-powered detection: Is user trying to change/specify a time?
+async function detectTimeChangeIntent(text: string, fullMessage: string): Promise<boolean> {
+  // Quick deterministic checks first (fast path)
+  if (/^([^,]+),\s*([\w.-]+@[\w.-]+\.[A-Za-z]{2,})$/.test(fullMessage.trim())) {
+    // Looks like "Name, email@example.com" - definitely NOT a time change
+    return false;
+  }
+
+  const systemPrompt = `You are a context analyzer. The user was just asked to provide their name and email (format: "John Doe, john@example.com"), but we need to detect if they're actually trying to change their appointment time instead.
+
+Respond with ONLY "YES" if the user is trying to specify/change a TIME, or "NO" if they're trying to provide contact information or something else.
+
+Examples of TIME change requests (respond YES):
+- "let's do 10 15"
+- "change it to 10"
+- "actually 9:30"
+- "no I want 10"
+- "10.15"
+- "V 10"
+- "morning instead"
+- "ráno"
+- "změň to na 10"
+- "ne, chci 10:30"
+
+Examples of NOT time changes (respond NO):
+- "John Doe, john@example.com"
+- "my name is John"
+- "I don't have an email"
+- "what do you need?"
+- "yes"
+- "no"
+
+Respond with ONLY "YES" or "NO".`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `User message: "${text}"` },
+      ],
+      temperature: 0,
+      max_tokens: 5,
+    });
+
+    const response = completion.choices[0].message?.content?.trim().toUpperCase();
+    return response === "YES";
+  } catch (error) {
+    console.error("AI time change detection error:", error);
+    // Fallback to simple regex if AI fails
+    return /(\d{1,2}[\.:,\s]\d{1,2})|(\b[vV]\s+\d{1,2})|(\bmorning\b|\bafternoon\b|\bevening\b|\báno\b|\bodpoledne\b|\bkolem\b|\bchange\b|\bzměn\b)/i.test(text);
+  }
+}
+
 // AI-powered time slot matching
 async function findSlotByNaturalLanguage(
   userInput: string,
@@ -891,11 +945,10 @@ export async function handleMessage(
 
   // Step 4a → ask for contact details
   if (state.step === "ask_contact") {
-    // Check if user is trying to change the time instead of providing contact details
-    // Detect time-like patterns: "9.15", "V 10", "morning", "ráno", etc.
-    const looksLikeTime = /(\d{1,2}[\.:,]\d{2})|(\b[vV]\s+\d{1,2})|(\bmorning\b|\bafternoon\b|\bevening\b|\bearly\b|\blate\b|\báno\b|\bodpoledne\b|\bvečer\b|\bbrzy\b|\bkolem\b)/i.test(text);
+    // Use AI to detect if user is trying to change time instead of providing contact
+    const isTimeChangeRequest = await detectTimeChangeIntent(text, body);
     
-    if (looksLikeTime) {
+    if (isTimeChangeRequest) {
       // User wants to change the time - store the new time request and ask for confirmation
       userState[from].requestedTimeChange = text;
       userState[from].step = "confirm_time_change";
