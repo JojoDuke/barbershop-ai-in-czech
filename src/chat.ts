@@ -745,11 +745,12 @@ export async function handleMessage(
       );
     }
 
-    // Czech format: "V 10" or "v 14:30" (meaning "at 10" or "at 14:30")
-    const czechAtMatch = text.match(/\b[vV]\s+(\d{1,2})(?::(\d{2}))?\b/);
-    if (czechAtMatch) {
-      const hour = czechAtMatch[1];
-      const minute = czechAtMatch[2] || "00";
+    // European/Czech time format: "9.15", "14.30", "V 9.15", "at 9.15"
+    // Matches: dot or colon separator, with or without "V"/"at" prefix
+    const europeanTimeMatch = text.match(/(?:\b[vV]\s+|at\s+)?(\d{1,2})[\.:,](\d{2})\b/i);
+    if (europeanTimeMatch) {
+      const hour = parseInt(europeanTimeMatch[1]);
+      const minute = parseInt(europeanTimeMatch[2]);
       const slots = state.slots || [];
       
       const chosenSlot = slots.find((s: any) => {
@@ -757,18 +758,41 @@ export async function handleMessage(
         const slotHour = slotStart.hour();
         const slotMinute = slotStart.minute();
         
-        return slotHour === parseInt(hour) && slotMinute === parseInt(minute);
+        return slotHour === hour && slotMinute === minute;
       });
       
-      if (!chosenSlot) {
-        return t.timeNotAvailable;
+      if (chosenSlot) {
+        userState[from].chosenSlot = chosenSlot;
+        userState[from].step = "ask_contact";
+        return t.youPicked(
+          formatSlotFriendly(chosenSlot.attributes.start),
+          state.chosenService.attributes.name
+        );
       }
-      userState[from].chosenSlot = chosenSlot;
-      userState[from].step = "ask_contact";
-      return t.youPicked(
-        formatSlotFriendly(chosenSlot.attributes.start),
-        state.chosenService.attributes.name
-      );
+    }
+    
+    // Simple hour format: "V 10", "v 14", "at 10" (hour only, no minutes)
+    const simpleHourMatch = text.match(/(?:\b[vV]\s+|at\s+)?(\d{1,2})\s*(?:hodin|h)?\b/i);
+    if (simpleHourMatch && !europeanTimeMatch) {
+      const hour = parseInt(simpleHourMatch[1]);
+      const slots = state.slots || [];
+      
+      const chosenSlot = slots.find((s: any) => {
+        const slotStart = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+        const slotHour = slotStart.hour();
+        const slotMinute = slotStart.minute();
+        
+        return slotHour === hour && slotMinute === 0;
+      });
+      
+      if (chosenSlot) {
+        userState[from].chosenSlot = chosenSlot;
+        userState[from].step = "ask_contact";
+        return t.youPicked(
+          formatSlotFriendly(chosenSlot.attributes.start),
+          state.chosenService.attributes.name
+        );
+      }
     }
 
     // try selection by time range (e.g. "1:00 PM - 1:30 PM" or "13:00 - 13:30")
