@@ -113,6 +113,81 @@ function formatDuration(seconds: number | undefined) {
   return `${hrs}h ${rem}m`;
 }
 
+// AI-powered time slot matching
+async function findSlotByNaturalLanguage(
+  userInput: string,
+  availableSlots: any[]
+): Promise<any | null> {
+  if (availableSlots.length === 0) return null;
+
+  // Build a list of available times for the AI
+  const slotList = availableSlots
+    .map((s: any, idx: number) => {
+      const start = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+      const end = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+      return `${idx + 1}. ${start.format("HH:mm")} (${start.format("h:mm A")}) - ${end.format("HH:mm")} (${end.format("h:mm A")})`;
+    })
+    .join("\n");
+
+  const systemPrompt = `You are a time slot matcher. The user wants to book a time slot and has given a natural language description.
+
+Available time slots:
+${slotList}
+
+Based on the user's input, select the BEST MATCHING slot number (1-${availableSlots.length}).
+
+Rules for English:
+- "morning"/"early morning" = earliest slots (before 12:00)
+- "afternoon" = slots between 12:00-17:00
+- "evening"/"late" = slots after 17:00
+- "around X"/"X o'clock"/"at X" = closest slot to that hour
+- "early" = first available slot
+- "late" = last available slot
+- "after X" = first slot after time X
+- "before X" = last slot before time X
+
+Rules for Czech:
+- "ráno"/"dopoledne" (morning) = earliest slots (before 12:00)
+- "odpoledne" (afternoon) = slots between 12:00-17:00
+- "večer" (evening) = slots after 17:00
+- "brzy"/"brzky" (early) = first available slot
+- "pozdě"/"pozde" (late) = last available slot
+- "kolem X"/"okolo X" (around X) = closest slot to that hour
+- "po X" (after X) = first slot after time X
+- "před X" (before X) = last slot before time X
+- "V X" or "v X" = at time X (exact match)
+
+If exact time given (like "10:00", "14:30", "V 10"), match exactly to that time.
+If unclear or no good match, return "UNCLEAR".
+
+Respond with ONLY the slot number (1-${availableSlots.length}), nothing else.`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `User wants: "${userInput}"` },
+      ],
+      temperature: 0,
+    });
+
+    const response = completion.choices[0].message?.content?.trim();
+    if (!response || response === "UNCLEAR") {
+      return null;
+    }
+
+    const slotNumber = parseInt(response);
+    if (slotNumber >= 1 && slotNumber <= availableSlots.length) {
+      return availableSlots[slotNumber - 1];
+    }
+  } catch (error) {
+    console.error("AI time slot matching error:", error);
+  }
+
+  return null;
+}
+
 
 // Getting services
 function buildServiceMenu(businessName: string, services: any[]) {
@@ -670,6 +745,32 @@ export async function handleMessage(
       );
     }
 
+    // Czech format: "V 10" or "v 14:30" (meaning "at 10" or "at 14:30")
+    const czechAtMatch = text.match(/\b[vV]\s+(\d{1,2})(?::(\d{2}))?\b/);
+    if (czechAtMatch) {
+      const hour = czechAtMatch[1];
+      const minute = czechAtMatch[2] || "00";
+      const slots = state.slots || [];
+      
+      const chosenSlot = slots.find((s: any) => {
+        const slotStart = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+        const slotHour = slotStart.hour();
+        const slotMinute = slotStart.minute();
+        
+        return slotHour === parseInt(hour) && slotMinute === parseInt(minute);
+      });
+      
+      if (!chosenSlot) {
+        return t.timeNotAvailable;
+      }
+      userState[from].chosenSlot = chosenSlot;
+      userState[from].step = "ask_contact";
+      return t.youPicked(
+        formatSlotFriendly(chosenSlot.attributes.start),
+        state.chosenService.attributes.name
+      );
+    }
+
     // try selection by time range (e.g. "1:00 PM - 1:30 PM" or "13:00 - 13:30")
     const rangeMatch = text.match(/(\d{1,2}:\d{2}\s*(?:AM|PM)?)\s*-\s*(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
     if (rangeMatch) {
@@ -733,19 +834,35 @@ export async function handleMessage(
     }
 
     // try selection by number (legacy)
-    const index = parseInt(text) - 1;
-    const slots = state.slots || [];
-    const chosenSlot = slots[index];
-    if (!chosenSlot) {
-      return t.slotNumberNotFound;
+    const parsedNumber = parseInt(text);
+    if (!isNaN(parsedNumber)) {
+      const index = parsedNumber - 1;
+      const slots = state.slots || [];
+      const chosenSlot = slots[index];
+      if (chosenSlot) {
+        userState[from].chosenSlot = chosenSlot;
+        userState[from].step = "ask_contact";
+        return t.youPicked(
+          formatSlotFriendly(chosenSlot.attributes.start),
+          state.chosenService.attributes.name
+        );
+      }
     }
 
-    userState[from].chosenSlot = chosenSlot;
-    userState[from].step = "ask_contact";
-    return t.youPicked(
-      formatSlotFriendly(chosenSlot.attributes.start),
-      state.chosenService.attributes.name
-    );
+    // AI-powered natural language time matching (fallback)
+    const slots = state.slots || [];
+    const aiMatchedSlot = await findSlotByNaturalLanguage(text, slots);
+    if (aiMatchedSlot) {
+      userState[from].chosenSlot = aiMatchedSlot;
+      userState[from].step = "ask_contact";
+      return t.youPicked(
+        formatSlotFriendly(aiMatchedSlot.attributes.start),
+        state.chosenService.attributes.name
+      );
+    }
+
+    // Nothing matched
+    return t.slotNumberNotFound;
   }
 
   // Step 4a → ask for contact details

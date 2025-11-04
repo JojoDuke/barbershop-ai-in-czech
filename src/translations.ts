@@ -23,16 +23,16 @@ export const translations = {
     noSlotsFullyBooked: (date: string) => `Sorry — all slots for ${date} are fully booked. Please choose another day.`,
     slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
       `For ${service} on ${date} we have slots available for (times shown in ${tz}, UTC${offset}):`,
-    replyWithTime: "Reply with the time range you want, or type 'more' to show more available slots.",
+    replyWithTime: "Reply with the time you want (e.g., 'morning', 'around 2', 'V 10', '14:00'), or type 'more' for more slots.",
     
     // Slot Selection
     moreSlots: "More available slots for this date:",
     noMoreSlots: "No more available slots for this date.",
     availableSlotsFor: (date: string, tz: string, offset: string) => 
       `Available slots for ${date} (times shown in ${tz} ${offset}):`,
-    timeNotAvailable: "I don't see that time available. Please pick a time range from the list above, or type 'more' to show more slots.",
-    timeRangeNotAvailable: "I don't see that time range available. Please pick a time range from the list above, or type 'more' to show more slots.",
-    slotNumberNotFound: "I don't see that slot number. Please pick a time from the list above, or type 'more' to show more slots.",
+    timeNotAvailable: "I don't see that time available. Please pick a time from the list above, describe when you'd like (e.g., 'morning', 'afternoon'), or type 'more' for more slots.",
+    timeRangeNotAvailable: "I don't see that time range available. Please pick a time from the list above, describe when you'd like (e.g., 'around 2', 'early'), or type 'more' for more slots.",
+    slotNumberNotFound: "I couldn't find a matching time slot. Please pick a time from the list above, describe when you'd like (e.g., 'morning', 'after 2'), or type 'more' for more slots.",
     
     // Contact Details
     youPicked: (time: string, service: string) => 
@@ -79,16 +79,16 @@ export const translations = {
     noSlotsFullyBooked: (date: string) => `Omlouváme se — všechny termíny pro ${date} jsou obsazené. Prosím vyberte jiný den.`,
     slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
       `Pro ${service} dne ${date} máme volné termíny (časy zobrazeny v ${tz}, UTC${offset}):`,
-    replyWithTime: "Odpovězte časem, který chcete, nebo napište 'více' pro zobrazení dalších volných termínů.",
+    replyWithTime: "Odpovězte časem, který chcete (např. 'ráno', 'odpoledne', 'kolem 14', 'V 10'), nebo napište 'více' pro další termíny.",
     
     // Výběr termínu
     moreSlots: "Další dostupné termíny pro toto datum:",
     noMoreSlots: "Žádné další volné termíny pro toto datum.",
     availableSlotsFor: (date: string, tz: string, offset: string) => 
       `Dostupné termíny pro ${date} (časy zobrazeny v ${tz} ${offset}):`,
-    timeNotAvailable: "Tento čas není k dispozici. Prosím vyberte časové rozmezí ze seznamu výše, nebo napište 'více' pro zobrazení dalších termínů.",
-    timeRangeNotAvailable: "Toto časové rozmezí není k dispozici. Prosím vyberte časové rozmezí ze seznamu výše, nebo napište 'více' pro zobrazení dalších termínů.",
-    slotNumberNotFound: "Toto číslo termínu nevidím. Prosím vyberte čas ze seznamu výše, nebo napište 'více' pro zobrazení dalších termínů.",
+    timeNotAvailable: "Tento čas není k dispozici. Prosím vyberte čas ze seznamu výše, popište kdy chcete (např. 'ráno', 'odpoledne'), nebo napište 'více' pro další termíny.",
+    timeRangeNotAvailable: "Toto časové rozmezí není k dispozici. Prosím vyberte čas ze seznamu výše, popište kdy chcete (např. 'kolem 14', 'brzy'), nebo napište 'více' pro další termíny.",
+    slotNumberNotFound: "Nemohl jsem najít odpovídající termín. Prosím vyberte čas ze seznamu výše, popište kdy chcete (např. 'ráno', 'po 14'), nebo napište 'více' pro další termíny.",
     
     // Kontaktní údaje
     youPicked: (time: string, service: string) => 
