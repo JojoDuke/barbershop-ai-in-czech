@@ -499,7 +499,7 @@ async function friendlyReply(
   userPrompt: string
 ): Promise<string> {
   const completion = await client.chat.completions.create({
-    model: "gpt-5",  // Using GPT-5 for best natural language understanding
+    model: "gpt-4o",  // Using GPT-4o for best natural language understanding
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -1036,18 +1036,31 @@ export async function handleMessage(
       const business = await getBusiness();
       const businessName = business?.data?.attributes?.name || "our shop";
 
-      return await friendlyReply(
-        t.systemPromptBarbershop,
-        t.bookingSuccessPrompt(
+      // Generate friendly confirmation message
+      try {
+        const aiConfirmation = await friendlyReply(
+          t.systemPromptBarbershop,
+          t.bookingSuccessPrompt(
+            state.chosenService.attributes.name,
+            dayjs(state.chosenSlot.attributes.start).tz(BUSINESS_TZ).format("dddd, h:mm A"),
+            customerName,
+            customerEmail,
+            businessName
+          )
+        );
+        return aiConfirmation;
+      } catch (aiError) {
+        console.error("AI confirmation generation failed:", aiError);
+        // Fallback to simple confirmation message
+        return t.bookingSuccessSimple(
           state.chosenService.attributes.name,
-          dayjs(state.chosenSlot.attributes.start).tz(BUSINESS_TZ).format("dddd, h:mm A"),
-          customerName,
-          customerEmail,
+          dayjs(state.chosenSlot.attributes.start).tz(BUSINESS_TZ).format("dddd, DD MMMM YYYY, h:mm A"),
           businessName
-        )
-      );
+        );
+      }
     } catch (error) {
       console.error("Error creating booking:", error);
+      console.error("Error details:", JSON.stringify(error, null, 2));
       return t.bookingError;
     }
   }

@@ -51,6 +51,8 @@ export const translations = {
     // Booking Success
     bookingSuccessPrompt: (service: string, time: string, name: string, email: string, businessName: string) =>
       `Confirm to the user that their booking is successful.\nService: ${service}\nTime: ${time}\nName: ${name}\nEmail: ${email}\nMake it sound warm and welcoming. Sign off with "Best regards, ${businessName} Team"`,
+    bookingSuccessSimple: (service: string, time: string, businessName: string) =>
+      `✅ Booking confirmed!\n\nService: ${service}\nTime: ${time}\n\nThank you for your booking! We look forward to seeing you.\n\nBest regards,\n${businessName} Team`,
     
     // Errors
     bookingError: "Sorry, there was an error creating your booking. Please try again or contact us directly.",
@@ -111,6 +113,8 @@ export const translations = {
     // Úspěšná rezervace
     bookingSuccessPrompt: (service: string, time: string, name: string, email: string, businessName: string) =>
       `Potvrďte uživateli, že jeho rezervace byla úspěšná.\nSlužba: ${service}\nČas: ${time}\nJméno: ${name}\nEmail: ${email}\nNechte to znít přátelsky a příjemně. Podepište se "S pozdravem, tým ${businessName}"`,
+    bookingSuccessSimple: (service: string, time: string, businessName: string) =>
+      `✅ Rezervace potvrzena!\n\nSlužba: ${service}\nČas: ${time}\n\nDěkujeme za vaši rezervaci! Těšíme se na vás.\n\nS pozdravem,\ntým ${businessName}`,
     
     // Chyby
     bookingError: "Omlouváme se, při vytváření vaší rezervace došlo k chybě. Prosím zkuste to znovu nebo nás kontaktujte přímo.",
