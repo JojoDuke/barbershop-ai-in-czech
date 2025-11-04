@@ -963,10 +963,31 @@ export async function handleMessage(
       return t.provideNameEmail;
     }
     const customerName = contactMatch[1].trim();
-    const customerEmail = contactMatch[2].trim();
+    const customerEmail = contactMatch[2].trim().toLowerCase(); // Normalize email to lowercase
+    
+    // Validate email doesn't contain name parts or look suspicious
+    if (customerName.toLowerCase().includes('@')) {
+      return t.invalidNameFormat;
+    }
+    
+    // Basic email validation
+    if (!customerEmail || customerEmail.length < 5 || !customerEmail.includes('.')) {
+      return t.invalidEmail;
+    }
+    
+    // Log for debugging
+    console.log(`📧 Contact info captured - Name: ${customerName}, Email: ${customerEmail}, Phone: ${from}`);
+    
     userState[from].customerName = customerName;
     userState[from].customerEmail = customerEmail;
     userState[from].step = "confirm_booking";
+    
+    console.log(`💾 Stored in userState[${from}]:`, {
+      customerName: userState[from].customerName,
+      customerEmail: userState[from].customerEmail,
+      step: userState[from].step
+    });
+    
     return t.confirmBooking(customerName, customerEmail);
   }
 
@@ -1006,9 +1027,18 @@ export async function handleMessage(
     // Strip "whatsapp:" prefix from phone number if present
     const customerPhone = from.replace(/^whatsapp:/i, "");
 
+    // Log booking details for debugging
+    console.log(`🎫 Creating booking:`);
+    console.log(`   Service: ${state.chosenService.attributes.name} (ID: ${state.chosenService.id})`);
+    console.log(`   Time: ${state.chosenSlot.attributes.start} to ${state.chosenSlot.attributes.end}`);
+    console.log(`   Customer: ${customerName}`);
+    console.log(`   Email: ${customerEmail}`);
+    console.log(`   Phone: ${customerPhone}`);
+
     try {
       // Save user to database (upsert - create or update)
       const user = await upsertUser(customerPhone, customerName, customerEmail);
+      console.log(`✅ User saved to database - ID: ${user.id}`);
 
       // Create booking in Reservio
       const booking = await createBooking(
@@ -1021,6 +1051,7 @@ export async function handleMessage(
         customerEmail,
         customerPhone
       );
+      console.log(`✅ Booking created in Reservio:`, booking?.data?.id || 'ID not available');
 
       // Save booking to our database
       await createBookingRecord(

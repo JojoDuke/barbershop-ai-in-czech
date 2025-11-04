@@ -38,6 +38,8 @@ export const translations = {
     youPicked: (time: string, service: string) => 
       `You picked: ${time} for ${service}. Please reply with your full name and email address to confirm the booking. (e.g. John Doe, john@example.com)`,
     provideNameEmail: "Please reply with your full name and email address, separated by a comma. (e.g. John Doe, john@example.com)",
+    invalidNameFormat: "Please provide your name without the @ symbol. Format: Full Name, email@example.com",
+    invalidEmail: "That email address doesn't look valid. Please provide a valid email address. (e.g. John Doe, john@example.com)",
     confirmTimeChange: (currentTime: string) => 
       `You already selected ${currentTime}. Do you want to change your time? Reply 'yes' to change or 'no' to keep it.`,
     timeChangeConfirmed: "Okay, let's pick a new time.",
@@ -100,6 +102,8 @@ export const translations = {
     youPicked: (time: string, service: string) => 
       `Vybrali jste si: ${time} pro ${service}. Prosím odpovězte vaším celým jménem a emailovou adresou pro potvrzení rezervace. (např. Jan Novák, jan@example.com)`,
     provideNameEmail: "Prosím odpovězte vaším celým jménem a emailovou adresou, odděleným čárkou. (např. Jan Novák, jan@example.com)",
+    invalidNameFormat: "Prosím zadejte své jméno bez symbolu @. Formát: Celé jméno, email@example.com",
+    invalidEmail: "Tato emailová adresa nevypadá platně. Prosím zadejte platnou emailovou adresu. (např. Jan Novák, jan@example.com)",
     confirmTimeChange: (currentTime: string) => 
       `Už jste vybrali ${currentTime}. Chcete změnit čas? Odpovězte 'ano' pro změnu nebo 'ne' pro zachování.`,
     timeChangeConfirmed: "Dobře, vybereme nový čas.",
