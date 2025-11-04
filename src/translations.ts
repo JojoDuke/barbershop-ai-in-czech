@@ -23,7 +23,7 @@ export const translations = {
     noSlotsFullyBooked: (date: string) => `Sorry — all slots for ${date} are fully booked. Please choose another day.`,
     slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
       `For ${service} on ${date} we have slots available for (times shown in ${tz}, UTC${offset}):`,
-    replyWithTime: "Reply with the time you want (e.g., '9.15', 'morning', 'V 10', 'around 2'), or type 'more' for more slots.",
+    replyWithTime: "Reply with the time you want, or type 'more' for more slots.",
     
     // Slot Selection
     moreSlots: "More available slots for this date:",
@@ -38,6 +38,10 @@ export const translations = {
     youPicked: (time: string, service: string) => 
       `You picked: ${time} for ${service}. Please reply with your full name and email address to confirm the booking. (e.g. John Doe, john@example.com)`,
     provideNameEmail: "Please reply with your full name and email address, separated by a comma. (e.g. John Doe, john@example.com)",
+    confirmTimeChange: (currentTime: string) => 
+      `You already selected ${currentTime}. Do you want to change your time? Reply 'yes' to change or 'no' to keep it.`,
+    timeChangeConfirmed: "Okay, let's pick a new time.",
+    confirmTimeChangePrompt: "Please reply 'yes' if you want to change your time, or 'no' to keep your current selection.",
     
     // Confirmation
     confirmBooking: (name: string, email: string) => 
@@ -79,7 +83,7 @@ export const translations = {
     noSlotsFullyBooked: (date: string) => `Omlouváme se — všechny termíny pro ${date} jsou obsazené. Prosím vyberte jiný den.`,
     slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
       `Pro ${service} dne ${date} máme volné termíny (časy zobrazeny v ${tz}, UTC${offset}):`,
-    replyWithTime: "Odpovězte časem, který chcete (např. '9.15', 'V 10', 'ráno', 'odpoledne'), nebo napište 'více' pro další termíny.",
+    replyWithTime: "Odpovězte časem, který chcete, nebo napište 'více' pro další termíny.",
     
     // Výběr termínu
     moreSlots: "Další dostupné termíny pro toto datum:",
@@ -94,6 +98,10 @@ export const translations = {
     youPicked: (time: string, service: string) => 
       `Vybrali jste si: ${time} pro ${service}. Prosím odpovězte vaším celým jménem a emailovou adresou pro potvrzení rezervace. (např. Jan Novák, jan@example.com)`,
     provideNameEmail: "Prosím odpovězte vaším celým jménem a emailovou adresou, odděleným čárkou. (např. Jan Novák, jan@example.com)",
+    confirmTimeChange: (currentTime: string) => 
+      `Už jste vybrali ${currentTime}. Chcete změnit čas? Odpovězte 'ano' pro změnu nebo 'ne' pro zachování.`,
+    timeChangeConfirmed: "Dobře, vybereme nový čas.",
+    confirmTimeChangePrompt: "Prosím odpovězte 'ano' pokud chcete změnit čas, nebo 'ne' pro zachování aktuálního výběru.",
     
     // Potvrzení
     confirmBooking: (name: string, email: string) => 

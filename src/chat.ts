@@ -891,6 +891,17 @@ export async function handleMessage(
 
   // Step 4a → ask for contact details
   if (state.step === "ask_contact") {
+    // Check if user is trying to change the time instead of providing contact details
+    // Detect time-like patterns: "9.15", "V 10", "morning", "ráno", etc.
+    const looksLikeTime = /(\d{1,2}[\.:,]\d{2})|(\b[vV]\s+\d{1,2})|(\bmorning\b|\bafternoon\b|\bevening\b|\bearly\b|\blate\b|\báno\b|\bodpoledne\b|\bvečer\b|\bbrzy\b|\bkolem\b)/i.test(text);
+    
+    if (looksLikeTime) {
+      // User wants to change the time - store the new time request and ask for confirmation
+      userState[from].requestedTimeChange = text;
+      userState[from].step = "confirm_time_change";
+      return t.confirmTimeChange(formatSlotFriendly(state.chosenSlot.attributes.start));
+    }
+    
     // Expecting: "Full Name, email@example.com"
     const contactMatch = body
       .trim()
@@ -904,6 +915,31 @@ export async function handleMessage(
     userState[from].customerEmail = customerEmail;
     userState[from].step = "confirm_booking";
     return t.confirmBooking(customerName, customerEmail);
+  }
+
+  // Step 4a.5 → confirm time change
+  if (state.step === "confirm_time_change") {
+    if (/^(yes|ano)$/i.test(body.trim())) {
+      // User confirmed they want to change time
+      const timeRequest = userState[from].requestedTimeChange;
+      delete userState[from].requestedTimeChange;
+      delete userState[from].chosenSlot;
+      
+      // Go back to slot selection and process their new time request
+      userState[from].step = "choose_slot";
+      
+      // Process the time request as if they just entered it in choose_slot step
+      // This will trigger all the time matching logic we already have
+      return await handleMessage(from, timeRequest);
+    } else if (/^(no|ne)$/i.test(body.trim())) {
+      // User doesn't want to change time - go back to asking for contact
+      userState[from].step = "ask_contact";
+      delete userState[from].requestedTimeChange;
+      return t.provideNameEmail;
+    } else {
+      // Unclear response
+      return t.confirmTimeChangePrompt;
+    }
   }
 
   // Step 4b → confirm booking
