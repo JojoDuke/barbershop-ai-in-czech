@@ -110,6 +110,11 @@ export async function createBooking(
   clientPhone: string
 ) {
   try {
+    console.log(`🔵 Reservio API - createBooking called with:`);
+    console.log(`   Name: ${clientName}`);
+    console.log(`   Email: ${clientEmail}`);
+    console.log(`   Phone: ${clientPhone}`);
+    
     const payload = {
       data: {
         type: "booking",
@@ -152,13 +157,21 @@ export async function createBooking(
       },
     };
 
+    console.log(`📤 Sending payload to Reservio:`, JSON.stringify(payload, null, 2));
+
     const { data } = await reservio.post(
       `/businesses/${process.env.BUSINESS_ID}/bookings`,
       payload
     );
+    
+    console.log(`📥 Reservio response:`, JSON.stringify(data, null, 2));
+    
     return data;
   } catch (err: any) {
     console.error("Error creating booking:", err.response?.data || err.message);
+    if (err.response?.data) {
+      console.error("Full error response:", JSON.stringify(err.response.data, null, 2));
+    }
     throw err;
   }
 }

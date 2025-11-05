@@ -36,7 +36,7 @@ export const translations = {
     
     // Contact Details
     youPicked: (time: string, service: string) => 
-      `You picked: ${time} for ${service}. Please reply with your full name and email address to confirm the booking. (e.g. John Doe, john@example.com)`,
+      `You picked: ${time} for ${service}.\n\nPlease reply with your full name and email address. (e.g. John Doe, john@example.com)\n\nNote: If you've booked before with this phone number, use the same email address.`,
     provideNameEmail: "Please reply with your full name and email address, separated by a comma. (e.g. John Doe, john@example.com)",
     invalidNameFormat: "Please provide your name without the @ symbol. Format: Full Name, email@example.com",
     invalidEmail: "That email address doesn't look valid. Please provide a valid email address. (e.g. John Doe, john@example.com)",
@@ -100,7 +100,7 @@ export const translations = {
     
     // Kontaktní údaje
     youPicked: (time: string, service: string) => 
-      `Vybrali jste si: ${time} pro ${service}. Prosím odpovězte vaším celým jménem a emailovou adresou pro potvrzení rezervace. (např. Jan Novák, jan@example.com)`,
+      `Vybrali jste si: ${time} pro ${service}.\n\nProsím odpovězte vaším celým jménem a emailovou adresou. (např. Jan Novák, jan@example.com)\n\nPoznámka: Pokud jste již dříve rezervovali s tímto telefonním číslem, použijte stejnou emailovou adresu.`,
     provideNameEmail: "Prosím odpovězte vaším celým jménem a emailovou adresou, odděleným čárkou. (např. Jan Novák, jan@example.com)",
     invalidNameFormat: "Prosím zadejte své jméno bez symbolu @. Formát: Celé jméno, email@example.com",
     invalidEmail: "Tato emailová adresa nevypadá platně. Prosím zadejte platnou emailovou adresu. (např. Jan Novák, jan@example.com)",
