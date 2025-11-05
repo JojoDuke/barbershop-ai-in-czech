@@ -9,7 +9,7 @@ import {
   getBusiness,
   getServices,
 } from "./reservio.js";
-import { upsertUser, createBookingRecord } from "./db.js";
+// import { upsertUser, createBookingRecord } from "./db.js"; // Disabled - using Reservio as source of truth
 import { t, LANGUAGE } from "./translations.js";
 
 dayjs.extend(utc);
@@ -1036,10 +1036,6 @@ export async function handleMessage(
     console.log(`   Phone: ${customerPhone}`);
 
     try {
-      // Save user to database (upsert - create or update)
-      const user = await upsertUser(customerPhone, customerName, customerEmail);
-      console.log(`✅ User saved to database - ID: ${user.id}`);
-
       // Create booking in Reservio
       const booking = await createBooking(
         state.chosenService.id,
@@ -1052,14 +1048,6 @@ export async function handleMessage(
         customerPhone
       );
       console.log(`✅ Booking created in Reservio:`, booking?.data?.id || 'ID not available');
-
-      // Save booking to our database
-      await createBookingRecord(
-        user.id,
-        state.chosenService.id,
-        state.chosenSlot.attributes.start,
-        state.chosenSlot.attributes.end
-      );
 
       userState[from] = { step: "done" };
 
