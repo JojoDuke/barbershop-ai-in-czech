@@ -943,9 +943,11 @@ export async function handleMessage(
       );
     }
 
-    // Check if user typed a simple hour number (like "9", "14", "21")
-    const hourMatch = text.match(/^\s*(\d{1,2})\s*$/);
-    if (hourMatch) {
+    // Check if user typed a simple hour number (like "9", "14", "21", "9?", etc.)
+    // Strip punctuation and whitespace, then check if it's just a number
+    const cleanText = text.replace(/[^\d]/g, '');
+    const hourMatch = cleanText.match(/^(\d{1,2})$/);
+    if (hourMatch && text.length <= 4) { // Ensure it's short (not a long number)
       const requestedHour = parseInt(hourMatch[1]);
       
       // Only process if it's a valid hour (0-23)
@@ -1140,16 +1142,24 @@ export async function handleMessage(
   if (state.step === "confirm_time_change") {
     if (/^(yes|ano)$/i.test(body.trim())) {
       // User confirmed they want to change time
-      const timeRequest = userState[from].requestedTimeChange;
+      const originalRequest = userState[from].requestedTimeChange;
       delete userState[from].requestedTimeChange;
       delete userState[from].chosenSlot;
       
-      // Go back to slot selection and process their new time request
-      userState[from].step = "choose_slot";
+      // Try to extract a time/hour from their original request
+      // Look for patterns like "9", "10:30", "9am", etc.
+      const hourMatch = originalRequest.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
       
-      // Process the time request as if they just entered it in choose_slot step
-      // This will trigger all the time matching logic we already have
-      return await handleMessage(from, timeRequest);
+      if (hourMatch) {
+        const extractedTime = hourMatch[0];
+        // Go back to slot selection and process the extracted time
+        userState[from].step = "choose_slot";
+        return await handleMessage(from, extractedTime);
+      } else {
+        // Couldn't extract a clear time - ask them to specify again
+        userState[from].step = "choose_slot";
+        return t.timeChangeConfirmed;
+      }
     } else if (/^(no|ne)$/i.test(body.trim())) {
       // User doesn't want to change time - go back to asking for contact
       userState[from].step = "ask_contact";
