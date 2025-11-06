@@ -167,6 +167,38 @@ Respond with ONLY "YES" or "NO".`;
   }
 }
 
+// Find slots near a requested hour
+function findNearbySlots(
+  requestedHour: number,
+  availableSlots: any[],
+  withinMinutes: number = 60
+): any[] {
+  const nearbySlots: any[] = [];
+  
+  for (const slot of availableSlots) {
+    const slotStart = dayjs(slot.attributes.start).tz(BUSINESS_TZ);
+    const slotHour = slotStart.hour();
+    const slotMinute = slotStart.minute();
+    
+    // Calculate total minutes from the requested hour
+    const requestedMinutes = requestedHour * 60;
+    const slotMinutes = slotHour * 60 + slotMinute;
+    const diff = Math.abs(slotMinutes - requestedMinutes);
+    
+    // If within the time window (e.g., 60 minutes)
+    if (diff <= withinMinutes) {
+      nearbySlots.push({
+        slot,
+        diff,
+        time: slotStart.format("h:mm A")
+      });
+    }
+  }
+  
+  // Sort by difference (closest first)
+  return nearbySlots.sort((a, b) => a.diff - b.diff);
+}
+
 // AI-powered time slot matching
 async function findSlotByNaturalLanguage(
   userInput: string,
@@ -911,7 +943,53 @@ export async function handleMessage(
       );
     }
 
-    // AI-powered natural language time matching (handles "10", "morning", "afternoon", etc.)
+    // Check if user typed a simple hour number (like "9", "14", "21")
+    const hourMatch = text.match(/^\s*(\d{1,2})\s*$/);
+    if (hourMatch) {
+      const requestedHour = parseInt(hourMatch[1]);
+      
+      // Only process if it's a valid hour (0-23)
+      if (requestedHour >= 0 && requestedHour <= 23) {
+        const slots = state.slots || [];
+        const nearby = findNearbySlots(requestedHour, slots, 90); // 90 minutes window
+        
+        if (nearby.length > 0) {
+          // Check if there's an exact match at that hour
+          const exactMatch = nearby.find(n => {
+            const slotStart = dayjs(n.slot.attributes.start).tz(BUSINESS_TZ);
+            return slotStart.hour() === requestedHour && slotStart.minute() === 0;
+          });
+          
+          if (exactMatch) {
+            // Exact match found - book it!
+            userState[from].chosenSlot = exactMatch.slot;
+            userState[from].step = "ask_contact";
+            return t.youPicked(
+              formatSlotFriendly(exactMatch.slot.attributes.start),
+              state.chosenService.attributes.name
+            );
+          }
+          
+          // No exact match - offer nearby slots
+          const nearbyOptions = nearby.slice(0, 5).map(n => `• ${n.time}`).join('\n');
+          const requestedTimeStr = requestedHour === 0 ? "12:00 AM" : 
+                                   requestedHour < 12 ? `${requestedHour}:00 AM` :
+                                   requestedHour === 12 ? "12:00 PM" :
+                                   `${requestedHour - 12}:00 PM`;
+          
+          // Store nearby slots for next response
+          userState[from].nearbySlots = nearby.slice(0, 5).map(n => n.slot);
+          userState[from].requestedTime = requestedTimeStr;
+          userState[from].step = "choose_nearby_slot";
+          
+          return LANGUAGE === 'cs' 
+            ? `Zadali jste ${requestedTimeStr}, ale tento přesný čas není k dispozici. Máme však tyto blízké časy:\n\n${nearbyOptions}\n\nProsím vyberte jeden z těchto časů, nebo napište 'více' pro další termíny.`
+            : `You requested ${requestedTimeStr}, but that exact time isn't available. However, we have these nearby times:\n\n${nearbyOptions}\n\nPlease pick one of these times, or type 'more' for more slots.`;
+        }
+      }
+    }
+
+    // AI-powered natural language time matching (handles "morning", "afternoon", etc.)
     const slots = state.slots || [];
     const aiMatchedSlot = await findSlotByNaturalLanguage(text, slots);
     if (aiMatchedSlot) {
@@ -925,6 +1003,89 @@ export async function handleMessage(
 
     // Nothing matched
     return t.slotNumberNotFound;
+  }
+
+  // Step 3b → choosing from nearby time slots
+  if (state.step === "choose_nearby_slot") {
+    const nearbySlots = state.nearbySlots || [];
+    
+    if (nearbySlots.length === 0) {
+      // Shouldn't happen, but handle gracefully
+      userState[from].step = "ask_time";
+      return t.slotNumberNotFound;
+    }
+    
+    // Check if user wants more slots
+    if (text.toLowerCase() === 'more' || text.toLowerCase() === 'více') {
+      userState[from].step = "ask_time";
+      userState[from].slotsOffset = (state.slotsOffset || 0) + 10;
+      
+      const slots = state.slots || [];
+      const offset = userState[from].slotsOffset;
+      const nextBatch = slots.slice(offset, offset + 10);
+      
+      if (nextBatch.length === 0) {
+        userState[from].slotsOffset = 0;
+        return t.noMoreSlots;
+      }
+      
+      const slotList = nextBatch
+        .map((s: any) => {
+          const start = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+          const end = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+          return `• ${start.format("h:mm A")} - ${end.format("h:mm A")}`;
+        })
+        .join("\n");
+      
+      return `${t.moreSlots}\n\n${slotList}\n\n${t.replyWithTime}`;
+    }
+    
+    // Try to match the user's selection to one of the nearby slots
+    const timeMatch = text.match(/(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
+    if (timeMatch) {
+      const timeStr = timeMatch[1].trim();
+      const chosenSlot = nearbySlots.find((s: any) => {
+        const slotStart = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+        const slot12Start = slotStart.format("h:mm A");
+        const slot24Start = slotStart.format("HH:mm");
+        
+        return (
+          slot12Start === timeStr ||
+          slot24Start === timeStr ||
+          slot12Start.toLowerCase() === timeStr.toLowerCase()
+        );
+      });
+      
+      if (chosenSlot) {
+        userState[from].chosenSlot = chosenSlot;
+        userState[from].step = "ask_contact";
+        return t.youPicked(
+          formatSlotFriendly(chosenSlot.attributes.start),
+          state.chosenService.attributes.name
+        );
+      }
+    }
+    
+    // Try AI matching on nearby slots only
+    const aiMatchedSlot = await findSlotByNaturalLanguage(text, nearbySlots);
+    if (aiMatchedSlot) {
+      userState[from].chosenSlot = aiMatchedSlot;
+      userState[from].step = "ask_contact";
+      return t.youPicked(
+        formatSlotFriendly(aiMatchedSlot.attributes.start),
+        state.chosenService.attributes.name
+      );
+    }
+    
+    // Re-show the nearby options
+    const nearbyOptions = nearbySlots.slice(0, 5).map((s: any) => {
+      const start = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+      return `• ${start.format("h:mm A")}`;
+    }).join('\n');
+    
+    return LANGUAGE === 'cs'
+      ? `Prosím vyberte jeden z těchto časů:\n\n${nearbyOptions}\n\nNebo napište 'více' pro další termíny.`
+      : `Please pick one of these times:\n\n${nearbyOptions}\n\nOr type 'more' for more slots.`;
   }
 
   // Step 4a → ask for contact details
