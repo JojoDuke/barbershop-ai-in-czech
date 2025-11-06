@@ -882,7 +882,7 @@ export async function handleMessage(
       );
     }
 
-    // try selection by time (legacy, e.g. "1:00 PM" or "13:00")
+    // try selection by exact time first (e.g. "10:45", "1:00 PM" or "13:00")
     const timeMatch = text.match(/(\d{1,2}:\d{2}\s*(?:AM|PM)?)/i);
     if (timeMatch) {
       const timeStr = timeMatch[1].trim();
@@ -911,23 +911,7 @@ export async function handleMessage(
       );
     }
 
-    // try selection by number (legacy)
-    const parsedNumber = parseInt(text);
-    if (!isNaN(parsedNumber)) {
-      const index = parsedNumber - 1;
-      const slots = state.slots || [];
-      const chosenSlot = slots[index];
-      if (chosenSlot) {
-        userState[from].chosenSlot = chosenSlot;
-        userState[from].step = "ask_contact";
-        return t.youPicked(
-          formatSlotFriendly(chosenSlot.attributes.start),
-          state.chosenService.attributes.name
-        );
-      }
-    }
-
-    // AI-powered natural language time matching (fallback)
+    // AI-powered natural language time matching (handles "10", "morning", "afternoon", etc.)
     const slots = state.slots || [];
     const aiMatchedSlot = await findSlotByNaturalLanguage(text, slots);
     if (aiMatchedSlot) {

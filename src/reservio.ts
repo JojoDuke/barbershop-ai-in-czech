@@ -63,6 +63,22 @@ export async function getServices() {
   }
 }
 
+// Get all resources/staff members (barbers)
+export async function getResources() {
+  try {
+    const { data } = await reservio.get(
+      `/businesses/${process.env.BUSINESS_ID}/resources`
+    );
+    return data;
+  } catch (err: any) {
+    console.error(
+      "Error fetching resources:",
+      err.response?.data || err.message
+    );
+    throw err;
+  }
+}
+
 // Get available slots for the next 3 days
 export async function getAvailableSlots(
   serviceId: string,

@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "build": "echo \"Build not required - using tsx\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:resources": "tsx src/test-resources.ts"
   },
   "keywords": [],
   "author": "",
