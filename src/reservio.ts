@@ -47,6 +47,118 @@ export async function getBusiness() {
   }
 }
 
+// Get detailed business information formatted for display
+export async function getBusinessInfo() {
+  try {
+    const business = await getBusiness();
+    const attrs = business?.data?.attributes;
+    
+    if (!attrs) return null;
+    
+    return {
+      name: attrs.name || "Business",
+      address: formatAddress(attrs),
+      phone: attrs.phone || null,
+      website: attrs.website || null,
+      email: attrs.email || null,
+      hours: formatBusinessHours(attrs.openingHours),
+      description: attrs.description || null,
+    };
+  } catch (err: any) {
+    console.error(
+      "Error fetching business info:",
+      err.response?.data || err.message
+    );
+    return null;
+  }
+}
+
+// Format business address
+function formatAddress(attrs: any): string {
+  const parts = [];
+  if (attrs.street) parts.push(attrs.street);
+  if (attrs.city) parts.push(attrs.city);
+  if (attrs.zip) parts.push(attrs.zip);
+  if (attrs.country) parts.push(attrs.country);
+  return parts.length > 0 ? parts.join(", ") : "Address not available";
+}
+
+// Format business hours for display
+function formatBusinessHours(openingHours: any): string {
+  if (!openingHours || typeof openingHours !== "object") {
+    return "Hours not available";
+  }
+  
+  const daysMap: Record<string, string> = {
+    monday: "Monday",
+    tuesday: "Tuesday",
+    wednesday: "Wednesday",
+    thursday: "Thursday",
+    friday: "Friday",
+    saturday: "Saturday",
+    sunday: "Sunday",
+  };
+  
+  const lines: string[] = [];
+  
+  for (const [day, hours] of Object.entries(openingHours)) {
+    const dayName = daysMap[day.toLowerCase()] || day;
+    
+    if (Array.isArray(hours) && hours.length > 0) {
+      const timeRanges = hours.map((h: any) => {
+        const from = h.from || h.start || "?";
+        const to = h.to || h.end || "?";
+        return `${from} - ${to}`;
+      }).join(", ");
+      lines.push(`${dayName}: ${timeRanges}`);
+    } else if (hours === false || hours === null) {
+      lines.push(`${dayName}: Closed`);
+    }
+  }
+  
+  return lines.length > 0 ? lines.join("\n") : "Hours not available";
+}
+
+// Get multiple venues (if BUSINESS_IDS is configured with comma-separated IDs)
+export async function getMultipleVenues() {
+  try {
+    // Check if multiple business IDs are configured
+    const businessIdsStr = process.env.BUSINESS_IDS || process.env.BUSINESS_ID;
+    if (!businessIdsStr) return null;
+    
+    const businessIds = businessIdsStr.includes(',') 
+      ? businessIdsStr.split(',').map(id => id.trim())
+      : [businessIdsStr];
+    
+    // If only one business, return null (single venue mode)
+    if (businessIds.length === 1) return null;
+    
+    // Fetch all venues
+    const venues = await Promise.all(
+      businessIds.map(async (id) => {
+        try {
+          const { data } = await reservio.get(`/businesses/${id}`);
+          return {
+            id,
+            name: data?.data?.attributes?.name || "Unknown",
+            address: formatAddress(data?.data?.attributes),
+            city: data?.data?.attributes?.city || "",
+            data: data?.data,
+          };
+        } catch (err) {
+          console.error(`Error fetching business ${id}:`, err);
+          return null;
+        }
+      })
+    );
+    
+    return venues.filter(Boolean);
+  } catch (err: any) {
+    console.error("Error fetching multiple venues:", err);
+    return null;
+  }
+}
+
 // Get all services (haircut, beard trim, etc.)
 export async function getServices() {
   try {

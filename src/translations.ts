@@ -5,6 +5,8 @@ export const translations = {
   en: {
     // Greeting & Menu
     welcome: (businessName: string) => `Welcome to ${businessName}!`,
+    welcomeExplained: (businessName: string) => `Welcome! 👋 I'm your booking assistant for ${businessName}.\n\nI can help you:\n• Check service availability\n• Book appointments\n• Get business information (hours, location, etc.)\n\nLet's get started!`,
+    welcomeBack: (name: string, businessName: string) => `Welcome back, ${name}! 👋 Great to see you again at ${businessName}.`,
     selectService: "Please select a service from our menu:",
     replyWithService: "To book your appointment, please reply with the exact name of the service you'd like.",
     
@@ -60,6 +62,29 @@ export const translations = {
     bookingError: "Sorry, there was an error creating your booking. Please try again or contact us directly.",
     didntUnderstand: "Tell the user you didn't understand and that they can type 'hi' to start again.",
     
+    // Business Info
+    businessInfoPrompt: "Show the user business information including hours, address, and contact details. Then ask if they'd like to book a service.",
+    businessHours: (hours: string) => `📅 Opening Hours:\n${hours}`,
+    businessAddress: (address: string) => `📍 Address:\n${address}`,
+    businessContact: (phone: string, website?: string) => {
+      let msg = `📞 Contact:\n${phone}`;
+      if (website) msg += `\n🌐 ${website}`;
+      return msg;
+    },
+    wouldYouLikeToBook: "Would you like to book a service?",
+    
+    // Off-topic / Return to flow
+    returnToBooking: "I'm here to help you book an appointment. Would you like to see our available services?",
+    
+    // Multi-venue support
+    selectVenue: "We have multiple locations. Which one would you like to book at?",
+    venueOption: (name: string, address: string) => `📍 ${name}\n   ${address}`,
+    
+    // User info persistence
+    confirmSavedInfo: (name: string, email: string) => `Is this still your contact information?\nName: ${name}\nEmail: ${email}\n\nReply 'yes' to confirm or 'no' to update.`,
+    infoConfirmed: "Great! I'll use this information for your booking.",
+    pleaseUpdateInfo: "Please provide your updated name and email (e.g. John Doe, john@example.com)",
+    
     // System Prompts
     systemPromptFriendly: "You are a friendly assistant.",
     systemPromptBarbershop: "You are a friendly barbershop assistant.",
@@ -69,6 +94,8 @@ export const translations = {
   cs: {
     // Pozdrav & Menu
     welcome: (businessName: string) => `Vítejte v ${businessName}!`,
+    welcomeExplained: (businessName: string) => `Vítejte! 👋 Jsem váš asistent pro rezervace v ${businessName}.\n\nMohu vám pomoci:\n• Zkontrolovat dostupnost služeb\n• Rezervovat termín\n• Získat informace o provozu (otevírací doba, adresa, atd.)\n\nPojďme začít!`,
+    welcomeBack: (name: string, businessName: string) => `Vítejte zpět, ${name}! 👋 Těší nás, že jste opět v ${businessName}.`,
     selectService: "Prosím vyberte si službu z našeho menu:",
     replyWithService: "Pro rezervaci termínu odpovězte přesným názvem služby, kterou si přejete.",
     
@@ -123,6 +150,29 @@ export const translations = {
     // Chyby
     bookingError: "Omlouváme se, při vytváření vaší rezervace došlo k chybě. Prosím zkuste to znovu nebo nás kontaktujte přímo.",
     didntUnderstand: "Řekněte uživateli, že jste nerozuměli a že může napsat 'ahoj' pro začátek znovu.",
+    
+    // Informace o provozu
+    businessInfoPrompt: "Ukažte uživateli informace o provozu včetně otevírací doby, adresy a kontaktních údajů. Poté se zeptejte, zda by chtěl rezervovat službu.",
+    businessHours: (hours: string) => `📅 Otevírací doba:\n${hours}`,
+    businessAddress: (address: string) => `📍 Adresa:\n${address}`,
+    businessContact: (phone: string, website?: string) => {
+      let msg = `📞 Kontakt:\n${phone}`;
+      if (website) msg += `\n🌐 ${website}`;
+      return msg;
+    },
+    wouldYouLikeToBook: "Chtěli byste si rezervovat službu?",
+    
+    // Návrat k rezervaci
+    returnToBooking: "Jsem zde, abych vám pomohl s rezervací. Chtěli byste vidět naše dostupné služby?",
+    
+    // Podpora více poboček
+    selectVenue: "Máme více poboček. Ve které byste si chtěli rezervovat?",
+    venueOption: (name: string, address: string) => `📍 ${name}\n   ${address}`,
+    
+    // Persistence uživatelských údajů
+    confirmSavedInfo: (name: string, email: string) => `Jsou to stále vaše kontaktní údaje?\nJméno: ${name}\nEmail: ${email}\n\nOdpovězte 'ano' pro potvrzení nebo 'ne' pro aktualizaci.`,
+    infoConfirmed: "Výborně! Použiji tyto údaje pro vaši rezervaci.",
+    pleaseUpdateInfo: "Prosím zadejte vaše aktualizované jméno a email (např. Jan Novák, jan@example.com)",
     
     // Systémové příkazy
     systemPromptFriendly: "Jsi přátelský asistent.",

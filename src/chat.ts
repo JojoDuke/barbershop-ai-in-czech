@@ -7,6 +7,8 @@ import {
   createBooking,
   getAvailableSlots,
   getBusiness,
+  getBusinessInfo,
+  getMultipleVenues,
   getServices,
 } from "./reservio.js";
 // import { upsertUser, createBookingRecord } from "./db.js"; // Disabled - using Reservio as source of truth
@@ -111,6 +113,120 @@ function formatDuration(seconds: number | undefined) {
   const rem = mins % 60;
   if (rem === 0) return `${hrs} hr${hrs > 1 ? "s" : ""}`;
   return `${hrs}h ${rem}m`;
+}
+
+// AI-powered detection: Is user asking for business info?
+async function detectBusinessInfoRequest(text: string): Promise<boolean> {
+  const systemPrompt = `You are a query analyzer. Detect if the user is asking for business information like hours, address, location, contact details.
+
+Respond with ONLY "YES" if asking for business info, or "NO" if not.
+
+Examples of business info requests (respond YES):
+- "what are your hours?"
+- "when are you open?"
+- "where are you located?"
+- "what's the address?"
+- "how do I contact you?"
+- "what's your phone number?"
+- "kde jste?" (where are you)
+- "otevírací doba" (opening hours)
+- "adresa" (address)
+
+Examples of NOT business info (respond NO):
+- "I want a haircut"
+- "book for tomorrow"
+- "what services do you have?"
+- "available slots"
+- "yes"
+- "no"
+
+Respond with ONLY "YES" or "NO".`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `User message: "${text}"` },
+      ],
+      temperature: 0,
+      max_tokens: 5,
+    });
+
+    const response = completion.choices[0].message?.content?.trim().toUpperCase();
+    return response === "YES";
+  } catch (error) {
+    console.error("AI business info detection error:", error);
+    // Fallback to regex
+    return /\b(hours?|open|opening|close|closing|address|location|where|contact|phone|email|kdy|otevírací|zavírací|doba|adresa|kde|kontakt)\b/i.test(text);
+  }
+}
+
+// AI-powered service matching with synonyms
+async function matchServiceBySynonym(
+  userInput: string,
+  availableServices: any[]
+): Promise<any | null> {
+  if (availableServices.length === 0) return null;
+
+  const serviceList = availableServices
+    .map((s: any, idx: number) => `${idx + 1}. ${s.attributes.name}`)
+    .join("\n");
+
+  const systemPrompt = `You are a service matcher. The user wants to book a service and has described it in their own words.
+
+Available services:
+${serviceList}
+
+Match the user's request to ONE of these services, accounting for:
+- Synonyms (e.g., "haircut" = "hair cut" = "cut" = "střih" = "vlasy")
+- Partial names (e.g., "beard" matches "Beard Trim")
+- Common variations in any language
+- Typos and misspellings
+
+If there's a clear match, respond with ONLY the service number (1-${availableServices.length}).
+If unclear or no good match, respond with "UNCLEAR".
+If multiple possible matches, respond with "MULTIPLE: " followed by the numbers separated by commas (e.g., "MULTIPLE: 1,3").
+
+Respond with ONLY the number, "UNCLEAR", or "MULTIPLE: X,Y".`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `User wants: "${userInput}"` },
+      ],
+      temperature: 0,
+    });
+
+    const response = completion.choices[0].message?.content?.trim();
+    if (!response || response === "UNCLEAR") {
+      return null;
+    }
+
+    // Handle multiple matches
+    if (response.startsWith("MULTIPLE:")) {
+      const numbers = response.replace("MULTIPLE:", "").trim().split(",");
+      return {
+        multiple: true,
+        matches: numbers.map((n) => {
+          const idx = parseInt(n.trim()) - 1;
+          return availableServices[idx];
+        }).filter(Boolean),
+      };
+    }
+
+    // Single match
+    const serviceNumber = parseInt(response);
+    if (serviceNumber >= 1 && serviceNumber <= availableServices.length) {
+      return availableServices[serviceNumber - 1];
+    }
+  } catch (error) {
+    console.error("AI service matching error:", error);
+  }
+
+  return null;
 }
 
 // AI-powered detection: Is user trying to change/specify a time?
@@ -285,6 +401,27 @@ function buildServiceMenu(businessName: string, services: any[]) {
     .join("\n");
 
   return `${t.welcome(businessName)}\n\n${t.selectService}\n\n${serviceList}\n\n${t.replyWithService}`;
+}
+
+// Helper: Transition to contact info step (with saved info check)
+function transitionToContactStep(from: string, chosenSlot: any, serviceName: string): string {
+  const state = userState[from];
+  userState[from].chosenSlot = chosenSlot;
+  
+  // Check if we have saved user info
+  if (state.savedName && state.savedEmail) {
+    userState[from].step = "confirm_saved_info";
+    return `${t.youPicked(
+      formatSlotFriendly(chosenSlot.attributes.start),
+      serviceName
+    )}\n\n${t.confirmSavedInfo(state.savedName, state.savedEmail)}`;
+  } else {
+    userState[from].step = "ask_contact";
+    return t.youPicked(
+      formatSlotFriendly(chosenSlot.attributes.start),
+      serviceName
+    );
+  }
 }
 
 
@@ -555,8 +692,26 @@ export async function handleMessage(
   }
 
 
-  // Bot introduction after user texts the fist message
+  // Bot introduction after user texts the first message
   if (!userState[from]) {
+    // Check for multiple venues first
+    const venues = await getMultipleVenues();
+    
+    if (venues && venues.length > 1) {
+      // Multiple venues - ask user to select one
+      userState[from] = {
+        step: "choose_venue",
+        venues: venues,
+      };
+      
+      const venueList = venues
+        .map((v: any, idx: number) => `${idx + 1}. ${t.venueOption(v.name, v.address)}`)
+        .join("\n\n");
+      
+      return `${t.selectVenue}\n\n${venueList}\n\nReply with the number of your preferred location.`;
+    }
+    
+    // Single venue - proceed normally
     const business = await getBusiness();
     const services = await getServices();
     const businessName = business?.data?.attributes?.name || "our shop";
@@ -566,11 +721,82 @@ export async function handleMessage(
       services: services.data,
     };
 
-    // deterministic menu message
-    return buildServiceMenu(businessName, services.data);
+    // Check if we have saved user info from previous session
+    const savedName = userState[from]?.savedName;
+    const savedEmail = userState[from]?.savedEmail;
+    
+    let greeting;
+    if (savedName) {
+      // Returning user
+      greeting = `${t.welcomeBack(savedName, businessName)}\n\n${t.selectService}`;
+    } else {
+      // New user - use enhanced greeting
+      greeting = t.welcomeExplained(businessName) + `\n\n${t.selectService}`;
+    }
+
+    const serviceList = services.data
+      .map(
+        (s: any) =>
+          `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`
+      )
+      .join("\n");
+
+    return `${greeting}\n\n${serviceList}\n\n${t.replyWithService}`;
   }
 
   const state = userState[from];
+  
+  // Check for business info requests at any point
+  const isBusinessInfoRequest = await detectBusinessInfoRequest(text);
+  if (isBusinessInfoRequest) {
+    const businessInfo = await getBusinessInfo();
+    if (businessInfo) {
+      let response = `${t.businessAddress(businessInfo.address)}\n\n`;
+      response += `${t.businessHours(businessInfo.hours)}\n\n`;
+      if (businessInfo.phone) {
+        response += `${t.businessContact(businessInfo.phone, businessInfo.website)}\n\n`;
+      }
+      response += t.wouldYouLikeToBook;
+      return response;
+    }
+  }
+
+  // Step 0 → Choose venue (if multiple locations)
+  if (state.step === "choose_venue") {
+    const venueNumber = parseInt(text.trim());
+    const venues = state.venues || [];
+    
+    if (isNaN(venueNumber) || venueNumber < 1 || venueNumber > venues.length) {
+      const venueList = venues
+        .map((v: any, idx: number) => `${idx + 1}. ${t.venueOption(v.name, v.address)}`)
+        .join("\n\n");
+      return `Please select a valid venue number (1-${venues.length}):\n\n${venueList}`;
+    }
+    
+    const selectedVenue = venues[venueNumber - 1];
+    
+    // Store selected venue and set env variable for this session
+    userState[from].selectedVenueId = selectedVenue.id;
+    userState[from].selectedVenueName = selectedVenue.name;
+    
+    // Temporarily override the BUSINESS_ID for this user's session
+    // Note: This is a simplified approach. In production, you'd want to pass businessId through all functions
+    process.env.BUSINESS_ID = selectedVenue.id;
+    
+    // Now get services for this venue
+    const services = await getServices();
+    userState[from].step = "choose_service";
+    userState[from].services = services.data;
+    
+    const serviceList = services.data
+      .map(
+        (s: any) =>
+          `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`
+      )
+      .join("\n");
+
+    return `Great! You selected ${selectedVenue.name}.\n\n${t.selectService}\n\n${serviceList}\n\n${t.replyWithService}`;
+  }
 
   // Step 1 → List Services + Duration
   if (state.step === "ask_service") {
@@ -591,11 +817,26 @@ export async function handleMessage(
 
   // Step 2 → choose service
   if (state.step === "choose_service") {
-    // Match by name (case-insensitive)
+    // Try exact match first (case-insensitive)
     const searchName = text.trim().toLowerCase();
-    const chosen = state.services.find(
+    let chosen = state.services.find(
       (s: any) => s.attributes.name.toLowerCase() === searchName
     );
+
+    // If no exact match, try AI-powered synonym matching
+    if (!chosen) {
+      const aiMatch = await matchServiceBySynonym(text, state.services);
+      
+      if (aiMatch && aiMatch.multiple) {
+        // Multiple possible matches - ask user to clarify
+        const matchList = aiMatch.matches
+          .map((s: any) => `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`)
+          .join("\n");
+        return `I found multiple services that might match. Which one would you like?\n\n${matchList}\n\n${t.replyWithService}`;
+      } else if (aiMatch) {
+        chosen = aiMatch;
+      }
+    }
 
     if (!chosen) {
       const serviceList = state.services
@@ -848,10 +1089,9 @@ export async function handleMessage(
       });
       
       if (chosenSlot) {
-        userState[from].chosenSlot = chosenSlot;
-        userState[from].step = "ask_contact";
-        return t.youPicked(
-          formatSlotFriendly(chosenSlot.attributes.start),
+        return transitionToContactStep(
+          from,
+          chosenSlot,
           state.chosenService.attributes.name
         );
       }
@@ -872,10 +1112,9 @@ export async function handleMessage(
       });
       
       if (chosenSlot) {
-        userState[from].chosenSlot = chosenSlot;
-        userState[from].step = "ask_contact";
-        return t.youPicked(
-          formatSlotFriendly(chosenSlot.attributes.start),
+        return transitionToContactStep(
+          from,
+          chosenSlot,
           state.chosenService.attributes.name
         );
       }
@@ -906,10 +1145,9 @@ export async function handleMessage(
       if (!chosenSlot) {
         return t.timeRangeNotAvailable;
       }
-      userState[from].chosenSlot = chosenSlot;
-      userState[from].step = "ask_contact";
-      return t.youPicked(
-        formatSlotFriendly(chosenSlot.attributes.start),
+      return transitionToContactStep(
+        from,
+        chosenSlot,
         state.chosenService.attributes.name
       );
     }
@@ -935,10 +1173,9 @@ export async function handleMessage(
       if (!chosenSlot) {
         return t.timeNotAvailable;
       }
-      userState[from].chosenSlot = chosenSlot;
-      userState[from].step = "ask_contact";
-      return t.youPicked(
-        formatSlotFriendly(chosenSlot.attributes.start),
+      return transitionToContactStep(
+        from,
+        chosenSlot,
         state.chosenService.attributes.name
       );
     }
@@ -964,10 +1201,9 @@ export async function handleMessage(
           
           if (exactMatch) {
             // Exact match found - book it!
-            userState[from].chosenSlot = exactMatch.slot;
-            userState[from].step = "ask_contact";
-            return t.youPicked(
-              formatSlotFriendly(exactMatch.slot.attributes.start),
+            return transitionToContactStep(
+              from,
+              exactMatch.slot,
               state.chosenService.attributes.name
             );
           }
@@ -995,10 +1231,9 @@ export async function handleMessage(
     const slots = state.slots || [];
     const aiMatchedSlot = await findSlotByNaturalLanguage(text, slots);
     if (aiMatchedSlot) {
-      userState[from].chosenSlot = aiMatchedSlot;
-      userState[from].step = "ask_contact";
-      return t.youPicked(
-        formatSlotFriendly(aiMatchedSlot.attributes.start),
+      return transitionToContactStep(
+        from,
+        aiMatchedSlot,
         state.chosenService.attributes.name
       );
     }
@@ -1059,10 +1294,9 @@ export async function handleMessage(
       });
       
       if (chosenSlot) {
-        userState[from].chosenSlot = chosenSlot;
-        userState[from].step = "ask_contact";
-        return t.youPicked(
-          formatSlotFriendly(chosenSlot.attributes.start),
+        return transitionToContactStep(
+          from,
+          chosenSlot,
           state.chosenService.attributes.name
         );
       }
@@ -1071,10 +1305,9 @@ export async function handleMessage(
     // Try AI matching on nearby slots only
     const aiMatchedSlot = await findSlotByNaturalLanguage(text, nearbySlots);
     if (aiMatchedSlot) {
-      userState[from].chosenSlot = aiMatchedSlot;
-      userState[from].step = "ask_contact";
-      return t.youPicked(
-        formatSlotFriendly(aiMatchedSlot.attributes.start),
+      return transitionToContactStep(
+        from,
+        aiMatchedSlot,
         state.chosenService.attributes.name
       );
     }
@@ -1127,15 +1360,37 @@ export async function handleMessage(
     
     userState[from].customerName = customerName;
     userState[from].customerEmail = customerEmail;
+    // Save for future bookings
+    userState[from].savedName = customerName;
+    userState[from].savedEmail = customerEmail;
     userState[from].step = "confirm_booking";
     
     console.log(`💾 Stored in userState[${from}]:`, {
       customerName: userState[from].customerName,
       customerEmail: userState[from].customerEmail,
+      savedName: userState[from].savedName,
+      savedEmail: userState[from].savedEmail,
       step: userState[from].step
     });
     
     return t.confirmBooking(customerName, customerEmail);
+  }
+  
+  // Step 4a.2 → confirm saved user info
+  if (state.step === "confirm_saved_info") {
+    if (/^(yes|ano)$/i.test(body.trim())) {
+      // User confirmed saved info
+      userState[from].customerName = state.savedName;
+      userState[from].customerEmail = state.savedEmail;
+      userState[from].step = "confirm_booking";
+      return t.confirmBooking(state.savedName, state.savedEmail);
+    } else if (/^(no|ne)$/i.test(body.trim())) {
+      // User wants to update info
+      userState[from].step = "ask_contact";
+      return t.pleaseUpdateInfo;
+    } else {
+      return t.confirmSavedInfo(state.savedName, state.savedEmail);
+    }
   }
 
   // Step 4a.5 → confirm time change
@@ -1237,6 +1492,14 @@ export async function handleMessage(
       console.error("Error details:", JSON.stringify(error, null, 2));
       return t.bookingError;
     }
+  }
+
+  // Off-track detection: if user is in middle of booking but asks something off-topic
+  // Guide them back to the booking flow
+  if (state.step && state.step !== "done") {
+    // User is in the middle of booking flow but message wasn't handled
+    // This could be an off-topic question or confusion
+    return t.returnToBooking;
   }
 
   // fallback
