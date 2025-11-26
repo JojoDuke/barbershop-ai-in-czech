@@ -136,7 +136,7 @@ Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`) and use it in Twilio.
 - Bot detects you want to change time
 - Asks for confirmation: "I see you want to change to Wednesday 11am. Should I find Wednesday slots instead?"
 - Reply: `yes`
-- Bot shows Wednesday slots
+- The bot shows Wednesday slots
 
 #### ✅ Test 6: Multi-Venue Support (if configured)
 **Setup:** Add multiple business IDs to `.env`:
