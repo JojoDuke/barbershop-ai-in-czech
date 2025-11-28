@@ -162,6 +162,113 @@ Respond with ONLY "YES" or "NO".`;
   }
 }
 
+// AI-powered parser: Extract service, date, and time from a single message
+async function parseServiceDateTime(
+  userInput: string,
+  availableServices: any[]
+): Promise<{
+  service: any | null;
+  date: dayjs.Dayjs | null;
+  timePreference: string | null; // "morning", "afternoon", "evening", or specific time
+} | null> {
+  const serviceList = availableServices
+    .map((s: any, idx: number) => `${idx + 1}. ${s.attributes.name}`)
+    .join("\n");
+
+  const today = dayjs.tz(dayjs(), BUSINESS_TZ);
+  const systemPrompt = `You are a booking request parser. Extract THREE components from the user's message:
+1. SERVICE - match to one of the available services
+2. DATE - extract the date they want
+3. TIME - extract time preference (morning/afternoon/evening) or specific time
+
+Available services:
+${serviceList}
+
+TODAY'S DATE: ${today.format("YYYY-MM-DD")} (${today.format("dddd, D MMMM YYYY")})
+
+TIME DEFINITIONS:
+- "morning" / "ráno" / "dopoledne" = before 12:00
+- "afternoon" / "odpoledne" = 12:00-17:00
+- "evening" / "večer" = after 17:00
+
+Respond in JSON format ONLY:
+{
+  "service": <service number 1-${availableServices.length} or null>,
+  "date": "YYYY-MM-DD" or null,
+  "timePreference": "morning" | "afternoon" | "evening" | null
+}
+
+Examples:
+- "I'd like a haircut on Tuesday evening" → {"service": 1, "date": "2025-01-14", "timePreference": "evening"}
+- "haircut tomorrow afternoon" → {"service": 1, "date": "${today.add(1, 'day').format("YYYY-MM-DD")}", "timePreference": "afternoon"}
+- "I want service 2 on Friday morning" → {"service": 2, "date": [next Friday], "timePreference": "morning"}
+
+If any component is missing or unclear, use null for that field.
+Respond with ONLY valid JSON, nothing else.`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Parse this request: "${userInput}"` },
+      ],
+      temperature: 0,
+      response_format: { type: "json_object" },
+    });
+
+    const response = completion.choices[0].message?.content?.trim();
+    if (!response) return null;
+
+    const parsed = JSON.parse(response);
+    
+    let service = null;
+    if (parsed.service && parsed.service >= 1 && parsed.service <= availableServices.length) {
+      service = availableServices[parsed.service - 1];
+    }
+
+    let date = null;
+    if (parsed.date) {
+      date = dayjs.tz(parsed.date, BUSINESS_TZ);
+      if (!date.isValid()) date = null;
+    }
+
+    return {
+      service,
+      date,
+      timePreference: parsed.timePreference || null,
+    };
+  } catch (error) {
+    console.error("AI service-date-time parsing error:", error);
+    return null;
+  }
+}
+
+// Filter slots by time preference
+function filterSlotsByTimePreference(
+  slots: any[],
+  timePreference: string | null
+): any[] {
+  if (!timePreference) return slots;
+
+  const preference = timePreference.toLowerCase();
+  
+  return slots.filter((slot: any) => {
+    const slotStart = dayjs(slot.attributes.start).tz(BUSINESS_TZ);
+    const hour = slotStart.hour();
+    
+    if (preference === "morning" || preference === "ráno" || preference === "dopoledne") {
+      return hour < 12;
+    } else if (preference === "afternoon" || preference === "odpoledne") {
+      return hour >= 12 && hour < 17;
+    } else if (preference === "evening" || preference === "večer") {
+      return hour >= 17;
+    }
+    
+    return true; // Unknown preference, return all slots
+  });
+}
+
 // AI-powered service matching with synonyms
 async function matchServiceBySynonym(
   userInput: string,
@@ -822,6 +929,167 @@ export async function handleMessage(
       return `${t.availableServices}\n\n${serviceList}\n\n${t.replyWithService}`;
     }
     
+    // Try to parse service + date + time all at once
+    const fullQuery = await parseServiceDateTime(text, state.services);
+    
+    // Handle full query with all three components
+    if (fullQuery && fullQuery.service && fullQuery.date && fullQuery.timePreference) {
+      // User provided all three components - show filtered slots directly
+      const chosen = fullQuery.service;
+      const requestedDate = fullQuery.date;
+      
+      userState[from].chosenService = chosen;
+      userState[from].serviceId = chosen.id;
+      
+      const dayStart = requestedDate.startOf("day");
+      const dayEnd = requestedDate.endOf("day");
+      const slotsData = await getAvailableSlots(
+        chosen.id,
+        dayStart.format(),
+        dayEnd.format()
+      );
+      const allSlots = slotsData?.data || [];
+
+      // Filter out past slots
+      const now = dayjs();
+      let daySlots = allSlots.filter((slot: any) =>
+        dayjs(slot.attributes.start).isAfter(now)
+      );
+
+      // Remove duplicates
+      const uniqueSlots = daySlots.filter(
+        (slot: any, index: number, self: any[]) => {
+          return (
+            index ===
+            self.findIndex(
+              (s: any) =>
+                s.attributes.start === slot.attributes.start &&
+                s.attributes.end === slot.attributes.end
+            )
+          );
+        }
+      );
+      daySlots = uniqueSlots;
+
+      // Filter by time preference
+      const filteredSlots = filterSlotsByTimePreference(daySlots, fullQuery.timePreference);
+
+      if (filteredSlots.length === 0) {
+        // No slots match the time preference
+        const timeLabel = fullQuery.timePreference === "evening" ? "evening" :
+                          fullQuery.timePreference === "afternoon" ? "afternoon" :
+                          fullQuery.timePreference === "morning" ? "morning" : "";
+        return `Sorry, there are no ${timeLabel} slots available for ${requestedDate.format("dddd, DD MMMM YYYY")}. Would you like to see all available slots for that day?`;
+      }
+
+      // Show filtered slots
+      const serviceName = chosen.attributes?.name || "the selected service";
+      const dateLabel = requestedDate.format("D MMMM");
+      const tzName = BUSINESS_TZ;
+      const tzOffset = dayjs().tz(BUSINESS_TZ).format("Z");
+
+      const slotList = filteredSlots.slice(0, 10)
+        .map((s: any) => {
+          const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+          const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+          return `• ${startTime.format("h:mm A")} - ${endTime.format("h:mm A")}`;
+        })
+        .join("\n");
+
+      userState[from].slots = filteredSlots;
+      userState[from].step = "choose_slot";
+      userState[from].slotPage = 1;
+
+      const timeLabel = fullQuery.timePreference === "evening" ? "evening" :
+                        fullQuery.timePreference === "afternoon" ? "afternoon" :
+                        fullQuery.timePreference === "morning" ? "morning" : "";
+
+      return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset)}\n${slotList}\n\n${t.replyWithTime}`;
+    }
+    
+    // Handle service + date (no time preference) - show all slots for that date
+    if (fullQuery && fullQuery.service && fullQuery.date && !fullQuery.timePreference) {
+      const chosen = fullQuery.service;
+      const requestedDate = fullQuery.date;
+      
+      userState[from].chosenService = chosen;
+      userState[from].serviceId = chosen.id;
+      
+      const dayStart = requestedDate.startOf("day");
+      const dayEnd = requestedDate.endOf("day");
+      const slotsData = await getAvailableSlots(
+        chosen.id,
+        dayStart.format(),
+        dayEnd.format()
+      );
+      const allSlots = slotsData?.data || [];
+
+      // Filter out past slots
+      const now = dayjs();
+      let daySlots = allSlots.filter((slot: any) =>
+        dayjs(slot.attributes.start).isAfter(now)
+      );
+
+      // Remove duplicates
+      const uniqueSlots = daySlots.filter(
+        (slot: any, index: number, self: any[]) => {
+          return (
+            index ===
+            self.findIndex(
+              (s: any) =>
+                s.attributes.start === slot.attributes.start &&
+                s.attributes.end === slot.attributes.end
+            )
+          );
+        }
+      );
+      daySlots = uniqueSlots;
+
+      if (daySlots.length === 0) {
+        return explainNoSlots(requestedDate, allSlots, daySlots);
+      }
+
+      // Show all slots for that date
+      const serviceName = chosen.attributes?.name || "the selected service";
+      const dateLabel = requestedDate.format("D MMMM");
+      const tzName = BUSINESS_TZ;
+      const tzOffset = dayjs().tz(BUSINESS_TZ).format("Z");
+
+      const slotList = daySlots.slice(0, 10)
+        .map((s: any) => {
+          const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+          const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+          return `• ${startTime.format("h:mm A")} - ${endTime.format("h:mm A")}`;
+        })
+        .join("\n");
+
+      userState[from].slots = daySlots;
+      userState[from].step = "choose_slot";
+      userState[from].slotPage = 1;
+
+      return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset)}\n${slotList}\n\n${t.replyWithTime}`;
+    }
+    
+    // Handle service + time preference (no date) - ask for date
+    if (fullQuery && fullQuery.service && !fullQuery.date && fullQuery.timePreference) {
+      const chosen = fullQuery.service;
+      userState[from].chosenService = chosen;
+      userState[from].serviceId = chosen.id;
+      userState[from].requestedTimePreference = fullQuery.timePreference; // Store for later
+      userState[from].step = "choose_date";
+      return t.whatDate;
+    }
+    
+    // Handle service only (from full query parser)
+    if (fullQuery && fullQuery.service && !fullQuery.date && !fullQuery.timePreference) {
+      const chosen = fullQuery.service;
+      userState[from].chosenService = chosen;
+      userState[from].serviceId = chosen.id;
+      userState[from].step = "choose_date";
+      return t.whatDate;
+    }
+    
+    // If full query parsing didn't work or is incomplete, try service matching
     // Try exact match first (case-insensitive)
     const searchName = text.trim().toLowerCase();
     let chosen = state.services.find(
@@ -863,6 +1131,18 @@ export async function handleMessage(
 
   // Step 2b → choose date
   if (state.step === "choose_date") {
+    // Check for time preference in the text
+    let timePreference: string | null = state.requestedTimePreference || null;
+    
+    // Detect time preference in the current message
+    if (/\b(morning|ráno|dopoledne)\b/i.test(text)) {
+      timePreference = "morning";
+    } else if (/\b(afternoon|odpoledne)\b/i.test(text)) {
+      timePreference = "afternoon";
+    } else if (/\b(evening|večer|vecer)\b/i.test(text)) {
+      timePreference = "evening";
+    }
+    
     // Try regex-based parsing first (fast & reliable for standard formats)
     // Then fallback to AI for complex natural language
     let requested = parseRequestedDate(text);
@@ -903,6 +1183,18 @@ export async function handleMessage(
       );
       daySlots = uniqueSlots;
 
+      // Filter by time preference if specified
+      if (timePreference) {
+        daySlots = filterSlotsByTimePreference(daySlots, timePreference);
+        
+        if (daySlots.length === 0) {
+          const timeLabel = timePreference === "evening" ? "evening" :
+                           timePreference === "afternoon" ? "afternoon" :
+                           timePreference === "morning" ? "morning" : "";
+          return `Sorry, there are no ${timeLabel} slots available for ${requested!.format("dddd, DD MMMM YYYY")}. Would you like to see all available slots for that day?`;
+        }
+      }
+
       if (daySlots.length === 0) {
         return explainNoSlots(requested!, allSlots, daySlots);
       }
@@ -928,6 +1220,7 @@ export async function handleMessage(
       userState[from].slots = daySlots; // store all slots for later
       userState[from].step = "choose_slot";
       userState[from].slotPage = 1;
+      delete userState[from].requestedTimePreference; // Clear stored preference
       return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset)}\n${slotList}\n\n${t.replyWithTime}`;
     }
   }
