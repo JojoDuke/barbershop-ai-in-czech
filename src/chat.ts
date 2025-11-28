@@ -728,20 +728,14 @@ export async function handleMessage(
     let greeting;
     if (savedName) {
       // Returning user
-      greeting = `${t.welcomeBack(savedName, businessName)}\n\n${t.selectService}`;
+      greeting = `${t.welcomeBack(savedName, businessName)}`;
     } else {
-      // New user - use enhanced greeting
-      greeting = t.welcomeExplained(businessName) + `\n\n${t.selectService}`;
+      // New user - use enhanced greeting (ends with "Let's get started!")
+      greeting = t.welcomeExplained(businessName);
     }
 
-    const serviceList = services.data
-      .map(
-        (s: any) =>
-          `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`
-      )
-      .join("\n");
-
-    return `${greeting}\n\n${serviceList}\n\n${t.replyWithService}`;
+    // Just return the greeting, no service list
+    return greeting;
   }
 
   const state = userState[from];
@@ -817,6 +811,17 @@ export async function handleMessage(
 
   // Step 2 → choose service
   if (state.step === "choose_service") {
+    // Check if user is asking for services list
+    if (/\b(services?|menu|what|show|list|available|dostupné|služby|menu)\b/i.test(text)) {
+      const serviceList = state.services
+        .map(
+          (s: any) =>
+            `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`
+        )
+        .join("\n");
+      return `${t.availableServices}\n\n${serviceList}\n\n${t.replyWithService}`;
+    }
+    
     // Try exact match first (case-insensitive)
     const searchName = text.trim().toLowerCase();
     let chosen = state.services.find(
@@ -846,8 +851,8 @@ export async function handleMessage(
         )
         .join("\n");
 
-      // deterministic error message
-      return `${t.serviceNotFound}\n\n${serviceList}\n\n${t.replyWithService}`;
+      // Show services if input doesn't match
+      return `${t.availableServices}\n\n${serviceList}\n\n${t.replyWithService}`;
     }
 
     userState[from].chosenService = chosen;
