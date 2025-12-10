@@ -72,6 +72,25 @@ Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`) and use it in Twilio.
 4. Set webhook URL to: `https://your-ngrok-url.ngrok.io/whatsapp`
 5. Set HTTP method to `POST`
 
+### 🆕 New Feature: Direct Booking Intent Detection
+
+The bot now intelligently detects when you want to book right from your first message and skips the greeting to get you booking faster!
+
+**How it works:**
+
+| Your First Message | Old Behavior | New Behavior ✨ |
+|-------------------|--------------|-----------------|
+| `hi` or `hello` | Shows greeting | Shows greeting (unchanged) |
+| `I want a haircut` | Shows greeting → Then you say "haircut" | **Skips greeting** → Asks for date directly |
+| `I need a haircut tomorrow` | Shows greeting → You say "haircut" → You say "tomorrow" | **Skips greeting** → Shows tomorrow's slots immediately |
+| `Book me a trim tomorrow morning` | Shows greeting → Multiple steps | **Skips greeting** → Shows morning slots for tomorrow |
+
+**Benefits:**
+- ⚡ Faster booking for users who know what they want
+- 🎯 Direct path to appointment scheduling
+- 💬 More natural conversation flow
+- 🌍 Works in both English and Czech
+
 ### Test Scenarios
 
 #### ✅ Test 1: Enhanced Greeting
@@ -81,6 +100,23 @@ Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`) and use it in Twilio.
 - Bot explains its capabilities
 - Shows list of available services
 - Message should mention: "I can help you: Check service availability, Book appointments, Get business information"
+
+#### ✅ Test 1b: Direct Booking Intent (NEW)
+**Send:** `I want to book a haircut` or `I need a haircut tomorrow` or `Can I book a beard trim?`
+
+**Expected:**
+- Bot skips the greeting entirely
+- Goes directly to booking flow based on what you mentioned:
+  - If service only mentioned: Asks for date
+  - If service + date mentioned: Shows available slots for that date
+  - If service + date + time preference (morning/afternoon/evening): Shows filtered slots
+- No greeting message shown
+
+**Test variations:**
+- `I want a haircut` → Skips greeting, asks for date
+- `I need a haircut tomorrow` → Skips greeting, shows tomorrow's slots
+- `Book me for a trim tomorrow morning` → Skips greeting, shows morning slots for tomorrow
+- `chci si zarezervovat střih` (Czech) → Skips greeting, asks for date
 
 #### ✅ Test 2: Business Info Request
 **Send:** `what are your hours?` or `where are you located?` or `otevírací doba` (Czech)
@@ -268,6 +304,10 @@ Visit `http://localhost:4000` in your browser to see:
 ## 📊 Testing Checklist
 
 - [ ] Enhanced greeting displays correctly
+- [ ] **Direct booking intent detection skips greeting (NEW)**
+- [ ] **Booking intent with service goes straight to date selection (NEW)**
+- [ ] **Booking intent with service + date shows slots immediately (NEW)**
+- [ ] **Booking intent with service + date + time filters slots correctly (NEW)**
 - [ ] Business info request works at any point
 - [ ] Service name matching handles variations
 - [ ] User info is saved after first booking
@@ -282,6 +322,7 @@ Visit `http://localhost:4000` in your browser to see:
 
 ## 🎯 Quick Test Commands
 
+### Standard Flow (with greeting)
 Copy-paste these into WhatsApp for quick testing:
 
 ```
@@ -302,6 +343,31 @@ next Friday
 2:00 PM
 yes
 yes
+```
+
+### Direct Booking Flow (NEW - skips greeting)
+Test immediate booking intent:
+
+```
+I want to book a haircut tomorrow at 10am
+John Doe, john@example.com
+yes
+```
+
+Or more natural variations:
+```
+I need a haircut
+tomorrow
+10:00 AM
+John Doe, john@example.com
+yes
+```
+
+Czech version:
+```
+Chci si zarezervovat střih zítra ráno
+Jan Novák, jan@example.cz
+ano
 ```
 
 ## 💡 Pro Tips
