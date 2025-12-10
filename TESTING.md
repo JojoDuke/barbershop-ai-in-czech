@@ -84,11 +84,13 @@ The bot now intelligently detects when you want to book right from your first me
 | `I want a haircut` | Shows greeting → Then you say "haircut" | **Skips greeting** → Asks for date directly |
 | `I need a haircut tomorrow` | Shows greeting → You say "haircut" → You say "tomorrow" | **Skips greeting** → Shows tomorrow's slots immediately |
 | `Book me a trim tomorrow morning` | Shows greeting → Multiple steps | **Skips greeting** → Shows morning slots for tomorrow |
+| `I want a haircut Friday after 3pm` | Shows greeting → Multiple steps → Shows ALL Friday slots | **Skips greeting** → Shows **only** slots after 3pm |
 
 **Benefits:**
 - ⚡ Faster booking for users who know what they want
 - 🎯 Direct path to appointment scheduling
 - 💬 More natural conversation flow
+- ⏰ Smart time filtering (after X, before X, morning/afternoon/evening)
 - 🌍 Works in both English and Czech
 
 ### Test Scenarios
@@ -117,6 +119,27 @@ The bot now intelligently detects when you want to book right from your first me
 - `I need a haircut tomorrow` → Skips greeting, shows tomorrow's slots
 - `Book me for a trim tomorrow morning` → Skips greeting, shows morning slots for tomorrow
 - `chci si zarezervovat střih` (Czech) → Skips greeting, asks for date
+
+#### ✅ Test 1c: Time Constraints - "After X" / "Before X" (NEW)
+**Send:** `I want to get a haircut on Friday, after 3pm`
+
+**Expected:**
+- Bot skips greeting
+- Shows **only** slots that start at or after 3:00 PM
+- Does NOT show all slots starting from 12:00 PM
+
+**Test variations:**
+- `I need a haircut tomorrow after 3pm` → Shows only slots after 3:00 PM tomorrow
+- `Book me Friday after 15:00` → Shows only slots after 3:00 PM (24-hour format)
+- `haircut tomorrow before 2pm` → Shows only slots before 2:00 PM
+- `I want a trim on Monday after 5pm` → Shows only evening slots after 5:00 PM
+- `střih zítra po 15` (Czech: haircut tomorrow after 3pm) → Shows slots after 3:00 PM
+
+**How it works:**
+- "after 3pm" → Only shows slots starting at 3:00 PM or later
+- "before 2pm" → Only shows slots starting at 2:00 PM or earlier
+- Works with both 12-hour (3pm) and 24-hour (15:00) formats
+- Works in both English and Czech
 
 #### ✅ Test 2: Business Info Request
 **Send:** `what are your hours?` or `where are you located?` or `otevírací doba` (Czech)
@@ -308,6 +331,9 @@ Visit `http://localhost:4000` in your browser to see:
 - [ ] **Booking intent with service goes straight to date selection (NEW)**
 - [ ] **Booking intent with service + date shows slots immediately (NEW)**
 - [ ] **Booking intent with service + date + time filters slots correctly (NEW)**
+- [ ] **Time constraints "after X" and "before X" filter slots correctly (NEW)**
+- [ ] **"After 3pm" shows only slots at or after 3:00 PM (NEW)**
+- [ ] **"Before 2pm" shows only slots at or before 2:00 PM (NEW)**
 - [ ] Business info request works at any point
 - [ ] Service name matching handles variations
 - [ ] User info is saved after first booking
@@ -368,6 +394,26 @@ Czech version:
 Chci si zarezervovat střih zítra ráno
 Jan Novák, jan@example.cz
 ano
+```
+
+### Time Constraints (NEW - "after X" / "before X")
+Test time filtering:
+
+```
+I want a haircut on Friday after 3pm
+[Bot shows only slots after 3:00 PM]
+3:00 PM
+John Doe, john@example.com
+yes
+```
+
+Or:
+```
+I need a haircut tomorrow before 2pm
+[Bot shows only slots before 2:00 PM]
+1:00 PM
+John Doe, john@example.com
+yes
 ```
 
 ## 💡 Pro Tips
