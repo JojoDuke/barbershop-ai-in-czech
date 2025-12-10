@@ -84,7 +84,7 @@ The bot now intelligently detects when you want to book right from your first me
 | `I want a haircut` | Shows greeting → Then you say "haircut" | **Skips greeting** → Asks for date directly |
 | `I need a haircut tomorrow` | Shows greeting → You say "haircut" → You say "tomorrow" | **Skips greeting** → Shows tomorrow's slots immediately |
 | `Book me a trim tomorrow morning` | Shows greeting → Multiple steps | **Skips greeting** → Shows morning slots for tomorrow |
-| `I want a haircut Friday after 3pm` | Shows greeting → Multiple steps → Shows ALL Friday slots | **Skips greeting** → Shows **only** slots after 3pm |
+| `I want a haircut Friday after 3pm` | Shows greeting → Multiple steps → Shows ALL Friday slots | **Skips greeting** → Shows **only** slots after 3pm → Message says "after 3:00 PM" |
 
 **Benefits:**
 - ⚡ Faster booking for users who know what they want
@@ -126,19 +126,21 @@ The bot now intelligently detects when you want to book right from your first me
 **Expected:**
 - Bot skips greeting
 - Shows **only** slots that start at or after 3:00 PM
+- Message says "For Strihani on 12 December **after 3:00 PM** we have slots available"
 - Does NOT show all slots starting from 12:00 PM
 
 **Test variations:**
-- `I need a haircut tomorrow after 3pm` → Shows only slots after 3:00 PM tomorrow
-- `Book me Friday after 15:00` → Shows only slots after 3:00 PM (24-hour format)
-- `haircut tomorrow before 2pm` → Shows only slots before 2:00 PM
-- `I want a trim on Monday after 5pm` → Shows only evening slots after 5:00 PM
-- `střih zítra po 15` (Czech: haircut tomorrow after 3pm) → Shows slots after 3:00 PM
+- `I need a haircut tomorrow after 3pm` → Shows only slots after 3:00 PM tomorrow, message says "after 3:00 PM"
+- `Book me Friday after 15:00` → Shows only slots after 3:00 PM (24-hour format), message says "after 3:00 PM"
+- `haircut tomorrow before 2pm` → Shows only slots before 2:00 PM, message says "before 2:00 PM"
+- `I want a trim on Monday after 5pm` → Shows only evening slots after 5:00 PM, message says "after 5:00 PM"
+- `střih zítra po 15` (Czech: haircut tomorrow after 3pm) → Shows slots after 3:00 PM, message says "po 15:00"
 
 **How it works:**
-- "after 3pm" → Only shows slots starting at 3:00 PM or later
-- "before 2pm" → Only shows slots starting at 2:00 PM or earlier
+- "after 3pm" → Only shows slots starting at 3:00 PM or later + message mentions "after 3:00 PM"
+- "before 2pm" → Only shows slots starting at 2:00 PM or earlier + message mentions "before 2:00 PM"
 - Works with both 12-hour (3pm) and 24-hour (15:00) formats
+- The bot explicitly mentions the time constraint in the response
 - Works in both English and Czech
 
 #### ✅ Test 2: Business Info Request
@@ -333,7 +335,9 @@ Visit `http://localhost:4000` in your browser to see:
 - [ ] **Booking intent with service + date + time filters slots correctly (NEW)**
 - [ ] **Time constraints "after X" and "before X" filter slots correctly (NEW)**
 - [ ] **"After 3pm" shows only slots at or after 3:00 PM (NEW)**
+- [ ] **Message explicitly mentions "after 3:00 PM" when that constraint is applied (NEW)**
 - [ ] **"Before 2pm" shows only slots at or before 2:00 PM (NEW)**
+- [ ] **Message explicitly mentions "before 2:00 PM" when that constraint is applied (NEW)**
 - [ ] Business info request works at any point
 - [ ] Service name matching handles variations
 - [ ] User info is saved after first booking
@@ -397,11 +401,12 @@ ano
 ```
 
 ### Time Constraints (NEW - "after X" / "before X")
-Test time filtering:
+Test time filtering with explicit time mention:
 
 ```
 I want a haircut on Friday after 3pm
-[Bot shows only slots after 3:00 PM]
+[Bot shows: "For Strihani on 12 December after 3:00 PM we have slots available"]
+[Only shows slots starting at 3:00 PM or later]
 3:00 PM
 John Doe, john@example.com
 yes
@@ -410,7 +415,8 @@ yes
 Or:
 ```
 I need a haircut tomorrow before 2pm
-[Bot shows only slots before 2:00 PM]
+[Bot shows: "For Strihani on 11 December before 2:00 PM we have slots available"]
+[Only shows slots up to 2:00 PM]
 1:00 PM
 John Doe, john@example.com
 yes

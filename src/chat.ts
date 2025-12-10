@@ -104,6 +104,34 @@ function tzOffsetLabel() {
   return dayjs.tz(dayjs(), BUSINESS_TZ).format("Z");
 }
 
+// Format time constraint for display (e.g., "after 3:00 PM", "before 2:00 PM")
+function formatTimeConstraintDescription(
+  timeConstraint: { type: 'after' | 'before', time: string } | null | undefined
+): string | undefined {
+  if (!timeConstraint) return undefined;
+  
+  const [hour, minute] = timeConstraint.time.split(':').map(Number);
+  const hourNum = hour;
+  
+  // Format time in 12-hour format
+  let formattedTime = '';
+  if (hourNum === 0) {
+    formattedTime = `12:${minute.toString().padStart(2, '0')} AM`;
+  } else if (hourNum < 12) {
+    formattedTime = `${hourNum}:${minute.toString().padStart(2, '0')} AM`;
+  } else if (hourNum === 12) {
+    formattedTime = `12:${minute.toString().padStart(2, '0')} PM`;
+  } else {
+    formattedTime = `${hourNum - 12}:${minute.toString().padStart(2, '0')} PM`;
+  }
+  
+  if (timeConstraint.type === 'after') {
+    return `after ${formattedTime}`;
+  } else {
+    return `before ${formattedTime}`;
+  }
+}
+
 // Duration conversion stuff
 function formatDuration(seconds: number | undefined) {
   if (!seconds || typeof seconds !== "number") return "";
@@ -1009,7 +1037,8 @@ export async function handleMessage(
           userState[from].step = "choose_slot";
           userState[from].slotPage = 1;
           
-          return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset)}\n${slotList}\n\n${t.replyWithTime}`;
+          const timeConstraintDesc = formatTimeConstraintDescription(fullQuery.timeConstraint);
+          return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset, timeConstraintDesc)}\n${slotList}\n\n${t.replyWithTime}`;
         } 
         // If they provided date but no time preference
         else if (fullQuery.date) {
@@ -1281,11 +1310,12 @@ export async function handleMessage(
       userState[from].step = "choose_slot";
       userState[from].slotPage = 1;
 
-      return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset)}\n${slotList}\n\n${t.replyWithTime}`;
+      const timeConstraintDesc = formatTimeConstraintDescription(fullQuery.timeConstraint);
+      return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset, timeConstraintDesc)}\n${slotList}\n\n${t.replyWithTime}`;
     }
     
-    // Handle service + date (no time preference) - show all slots for that date
-    if (fullQuery && fullQuery.service && fullQuery.date && !fullQuery.timePreference) {
+    // Handle service + date (no time preference/constraint) - show all slots for that date
+    if (fullQuery && fullQuery.service && fullQuery.date && !fullQuery.timePreference && !fullQuery.timeConstraint) {
       const chosen = fullQuery.service;
       const requestedDate = fullQuery.date;
       
@@ -1521,9 +1551,11 @@ export async function handleMessage(
       userState[from].slots = daySlots; // store all slots for later
       userState[from].step = "choose_slot";
       userState[from].slotPage = 1;
+      
+      const timeConstraintDesc = formatTimeConstraintDescription(timeConstraint);
       delete userState[from].requestedTimePreference; // Clear stored preference
       delete userState[from].requestedTimeConstraint; // Clear stored constraint
-      return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset)}\n${slotList}\n\n${t.replyWithTime}`;
+      return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset, timeConstraintDesc)}\n${slotList}\n\n${t.replyWithTime}`;
     }
   }
 

@@ -23,8 +23,8 @@ export const translations = {
     noSlotsWeekend: (date: string) => `Sorry — we're closed on ${date}. We're only open on weekdays. Please choose a weekday.`,
     noSlotsAllPast: (date: string) => `Sorry — all slots for today have already passed. Please choose a later time or another day.`,
     noSlotsFullyBooked: (date: string) => `Sorry — all slots for ${date} are fully booked. Please choose another day.`,
-    slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
-      `For ${service} on ${date} we have slots available for (times shown in ${tz}, UTC${offset}):`,
+    slotsAvailableFor: (service: string, date: string, tz: string, offset: string, timeConstraint?: string) => 
+      `For ${service} on ${date}${timeConstraint ? ` ${timeConstraint}` : ''} we have slots available (times shown in ${tz}, UTC${offset}):`,
     replyWithTime: "Reply with the time you want, or type 'more' for more slots.",
     
     // Slot Selection
@@ -112,8 +112,8 @@ export const translations = {
     noSlotsWeekend: (date: string) => `Omlouváme se — v ${date} máme zavřeno. Jsme otevřeni pouze ve všední dny. Prosím vyberte všední den.`,
     noSlotsAllPast: (date: string) => `Omlouváme se — všechny dnešní termíny již prošly. Prosím vyberte pozdější čas nebo jiný den.`,
     noSlotsFullyBooked: (date: string) => `Omlouváme se — všechny termíny pro ${date} jsou obsazené. Prosím vyberte jiný den.`,
-    slotsAvailableFor: (service: string, date: string, tz: string, offset: string) => 
-      `Pro ${service} dne ${date} máme volné termíny (časy zobrazeny v ${tz}, UTC${offset}):`,
+    slotsAvailableFor: (service: string, date: string, tz: string, offset: string, timeConstraint?: string) => 
+      `Pro ${service} dne ${date}${timeConstraint ? ` ${timeConstraint}` : ''} máme volné termíny (časy zobrazeny v ${tz}, UTC${offset}):`,
     replyWithTime: "Odpovězte časem, který chcete, nebo napište 'více' pro další termíny.",
     
     // Výběr termínu
