@@ -1,6 +1,41 @@
-# Testing Guide for Barbershop AI Bot
+# Testing Guide for Multi-Business AI Bot
 
-This guide will help you test all the new features we've implemented.
+This guide will help you test all the features of the multi-business booking bot.
+
+## 🆕 Multi-Business Mode
+
+The bot now supports **multiple businesses** across different categories:
+- **Hair Salon**: Barbershop services (haircuts, beard trims, styling)
+- **Physiotherapy**: Therapy and wellness services (massage, rehabilitation)
+
+Users are greeted by **Bridget**, an AI assistant who helps them choose a category and book appointments.
+
+## ⚠️ READ-ONLY MODE (Important for Testing)
+
+**CRITICAL**: The bot is connected to **LIVE booking systems**. To prevent accidental bookings during testing:
+
+### Enable Read-Only Mode
+
+Set this in your `.env` file:
+
+```env
+READ_ONLY_MODE=true
+```
+
+When enabled:
+- ✅ Bot shows all services and availability
+- ✅ Users can go through the full booking flow
+- ✅ All booking details are logged
+- ❌ **NO actual bookings are created** in the live systems
+- 📋 Mock confirmation message is shown instead
+
+### Disable for Production
+
+Only set to `false` when you're ready to create real bookings:
+
+```env
+READ_ONLY_MODE=false
+```
 
 ## 🚀 Quick Start
 
@@ -15,13 +50,11 @@ DATABASE_URL=postgresql://user:password@localhost:5432/barbershop
 # OpenAI
 OPENAI_API_KEY=sk-...
 
-# Reservio API
-RESERVIO_API_KEY=your_reservio_api_key
-BUSINESS_ID=your_reservio_business_id
-RESOURCE_ID=your_reservio_resource_id
+# Multi-Business Mode
+READ_ONLY_MODE=true  # SET TO TRUE FOR TESTING!
 
-# For multi-venue support (optional)
-# BUSINESS_IDS=business_id_1,business_id_2,business_id_3
+# Business configurations are now in src/businesses.ts
+# (No longer need RESERVIO_API_KEY, BUSINESS_ID in .env)
 
 # Timezone
 BUSINESS_TIMEZONE=Europe/Prague
@@ -30,6 +63,8 @@ RESERVIO_TIMEZONE=Europe/Prague
 # Server
 PORT=4000
 ```
+
+**Note**: Business configurations (API keys, business IDs) are now managed in `src/businesses.ts` instead of environment variables.
 
 ### 2. Start the Server
 
@@ -95,10 +130,44 @@ The bot now intelligently detects when you want to book right from your first me
 
 ### Test Scenarios
 
-#### ✅ Test 1: Enhanced Greeting
+#### ✅ Test 0: Multi-Business Category Selection (NEW)
 **Send:** `hi` or `hello`
 
 **Expected:**
+- Bot introduces itself as "Bridget, your AI assistant"
+- Shows category options:
+  - 1. Hair Salon - haircuts, styling, beard trims, grooming
+  - 2. Physiotherapy - massage, rehabilitation, therapy
+- Asks what type of service you're looking for
+
+**Follow-up:**
+- Send: `1` or `hair salon`
+- **Expected:** Bot shows available hair salon services
+- Send: `2` or `physiotherapy`
+- **Expected:** Bot shows available physiotherapy services
+
+#### ✅ Test 0b: Auto Category Detection (NEW)
+**Send:** `I want a haircut` (on first message)
+
+**Expected:**
+- Bot automatically detects "hair salon" category
+- Skips category selection
+- Goes directly to showing hair salon services or asking for date
+
+**Send:** `I need a massage` (on first message)
+
+**Expected:**
+- Bot automatically detects "physiotherapy" category
+- Skips category selection
+- Goes directly to showing physiotherapy services
+
+#### ✅ Test 1: Enhanced Greeting (Legacy Single-Business Mode)
+**Send:** `hi` or `hello`
+
+**Expected (if multi-business enabled):**
+- Bot introduces as Bridget and shows categories
+
+**Expected (if single-business mode):**
 - Bot explains its capabilities
 - Shows list of available services
 - Message should mention: "I can help you: Check service availability, Book appointments, Get business information"
@@ -233,23 +302,26 @@ BUSINESS_IDS=business_id_1,business_id_2
 - Shows matching services and availability
 - Continues booking flow
 
-#### ✅ Test 9: Full Booking Flow
+#### ✅ Test 9: Full Booking Flow (Multi-Business)
 **Complete end-to-end test:**
-1. `hi` → See greeting and services
-2. `haircut` → Select service
-3. `tomorrow` → Select date
-4. `10:00 AM` → Select time
-5. `John Doe, john@example.com` → Provide contact (first time)
-6. `yes` → Confirm booking
-7. **Expected:** Booking confirmation message
+1. `hi` → See Bridget greeting and category options
+2. `1` or `hair salon` → Select hair salon category
+3. `haircut` → Select service
+4. `tomorrow` → Select date
+5. `10:00 AM` → Select time
+6. `John Doe, john@example.com` → Provide contact (first time)
+7. `yes` → Confirm booking
+8. **Expected (READ_ONLY_MODE=true):** Test mode confirmation message
+9. **Expected (READ_ONLY_MODE=false):** Real booking confirmation message
 
 **Second booking (should use saved info):**
-1. `hi` → See "Welcome back, John!"
-2. `haircut` → Select service
-3. `next Friday` → Select date
-4. `2:00 PM` → Select time
-5. `yes` → Confirm saved info
-6. `yes` → Confirm booking
+1. `hi` → See category options
+2. `2` or `physiotherapy` → Select physiotherapy category
+3. Select a service (e.g., massage)
+4. `next Friday` → Select date
+5. `2:00 PM` → Select time
+6. `yes` → Confirm saved info
+7. `yes` → Confirm booking
 
 ## 🧪 Local Testing (Without WhatsApp)
 
@@ -422,6 +494,51 @@ John Doe, john@example.com
 yes
 ```
 
+## 🧪 READ-ONLY MODE Testing Checklist
+
+Before testing with LIVE bookings:
+
+- [ ] Verify `READ_ONLY_MODE=true` in `.env`
+- [ ] Complete at least one full booking flow for each category
+- [ ] Confirm mock confirmation messages appear
+- [ ] Check console logs show booking would have been created
+- [ ] Test category auto-detection works
+- [ ] Test service matching across businesses works
+- [ ] Verify no actual bookings appear in Reservio dashboard
+
+## 📊 Multi-Business Testing Checklist
+
+- [ ] Category selection shows both Hair Salon and Physiotherapy
+- [ ] Can select category by number (1, 2)
+- [ ] Can select category by name (hair salon, physiotherapy)
+- [ ] Auto-detection works for "I want a haircut"
+- [ ] Auto-detection works for "I need a massage"
+- [ ] Services load correctly for each category
+- [ ] Availability checking works for each business
+- [ ] Bookings track correct business context
+- [ ] Console logs show which business is being used
+
+## 🔧 Troubleshooting Multi-Business Issues
+
+**Issue:** Category selection not showing
+- Check if `src/businesses.ts` has multiple businesses configured
+- Verify businesses have different categories
+
+**Issue:** Services not loading after category selection
+- Check console for API errors
+- Verify business API tokens are valid in `src/businesses.ts`
+- Confirm `setCurrentBusiness()` is being called
+
+**Issue:** Bookings still being created in READ_ONLY mode
+- Verify `.env` has `READ_ONLY_MODE=true`
+- Restart the server after changing `.env`
+- Check console logs for "READ-ONLY MODE" messages
+
+**Issue:** Wrong business being used for booking
+- Check `userState[from].selectedBusinessId` in console logs
+- Verify `setCurrentBusiness()` is called with correct ID
+- Check that business context persists throughout conversation
+
 ## 💡 Pro Tips
 
 1. **Test with different languages**: Try Czech and English inputs
@@ -429,8 +546,19 @@ yes
 3. **Test timing**: Try booking for today, tomorrow, next week
 4. **Test persistence**: Complete booking, restart server, start new booking (info should be cleared)
 5. **Monitor console**: Watch for errors and debug logs
+6. **Test both categories**: Make sure to test both hair salon and physiotherapy flows
+7. **Use READ_ONLY mode**: Always test with READ_ONLY_MODE=true first!
+8. **Check business context**: Verify correct business is selected in console logs
 
 ---
 
 Happy testing! 🚀
+
+## 🔐 Security Note
+
+The business API tokens in `src/businesses.ts` are for LIVE systems. In production:
+- Move tokens to secure environment variables
+- Use a secrets management system (AWS Secrets Manager, etc.)
+- Never commit tokens to version control
+- Rotate tokens regularly
 

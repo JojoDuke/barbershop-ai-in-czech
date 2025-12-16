@@ -10,9 +10,18 @@ import {
   getBusinessInfo,
   getMultipleVenues,
   getServices,
+  setCurrentBusiness,
+  getCurrentBusiness,
 } from "./reservio.js";
 // import { upsertUser, createBookingRecord } from "./db.js"; // Disabled - using Reservio as source of truth
 import { t, LANGUAGE } from "./translations.js";
+import { 
+  getAllBusinesses, 
+  getBusinessesByCategory, 
+  getCategoryName, 
+  getCategoryDescription,
+  type BusinessConfig 
+} from "./businesses.js";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -143,6 +152,61 @@ function formatDuration(seconds: number | undefined) {
   return `${hrs}h ${rem}m`;
 }
 
+// AI-powered detection: What category of service is the user looking for?
+async function detectServiceCategory(text: string): Promise<'hair_salon' | 'physiotherapy' | null> {
+  const systemPrompt = `You are a service category detector. Determine what type of service the user is looking for.
+
+Respond with ONLY one of:
+- "HAIR_SALON" for haircut, styling, beard, barbershop, grooming services
+- "PHYSIOTHERAPY" for massage, therapy, rehabilitation, physical therapy, wellness services
+- "UNCLEAR" if you cannot determine
+
+Examples of HAIR_SALON:
+- "I want a haircut"
+- "Book me for a trim"
+- "I need my beard done"
+- "Can I get a fade?"
+- "střih" (haircut in Czech)
+- "holič" (barber in Czech)
+
+Examples of PHYSIOTHERAPY:
+- "I need a massage"
+- "Book me for physical therapy"
+- "I want rehabilitation"
+- "Can I get a therapeutic massage?"
+- "masáž" (massage in Czech)
+- "fyzioterapie" (physiotherapy in Czech)
+
+Respond with ONLY "HAIR_SALON", "PHYSIOTHERAPY", or "UNCLEAR".`;
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `User message: "${text}"` },
+      ],
+      temperature: 0,
+      max_tokens: 10,
+    });
+
+    const response = completion.choices[0].message?.content?.trim().toUpperCase();
+    if (response === "HAIR_SALON") return "hair_salon";
+    if (response === "PHYSIOTHERAPY") return "physiotherapy";
+    return null;
+  } catch (error) {
+    console.error("AI category detection error:", error);
+    // Fallback to regex
+    if (/\b(haircut|hair|trim|cut|beard|fade|style|barber|střih|holič|kadeř)\b/i.test(text)) {
+      return "hair_salon";
+    }
+    if (/\b(massage|therapy|physiotherapy|rehabilitation|physical|wellness|masáž|fyzio|terapie|rehabilit)\b/i.test(text)) {
+      return "physiotherapy";
+    }
+    return null;
+  }
+}
+
 // AI-powered detection: Is user expressing booking intent?
 async function detectBookingIntent(text: string): Promise<boolean> {
   const systemPrompt = `You are a query analyzer. Detect if the user is expressing intent to book/make an appointment or asking about services.
@@ -189,7 +253,7 @@ Respond with ONLY "YES" or "NO".`;
   } catch (error) {
     console.error("AI booking intent detection error:", error);
     // Fallback to regex
-    return /\b(book|appointment|reserve|reservation|haircut|trim|cut|služb|rezerv|objednání|chci|potřebuji|need|want)\b/i.test(text);
+    return /\b(book|appointment|reserve|reservation|haircut|trim|cut|massage|therapy|služb|rezerv|objednání|chci|potřebuji|need|want|masáž)\b/i.test(text);
   }
 }
 
@@ -923,24 +987,74 @@ export async function handleMessage(
     // Detect if user has immediate booking intent
     const hasBookingIntent = await detectBookingIntent(text);
     
-    // Check for multiple venues first
-    const venues = await getMultipleVenues();
+    // Multi-business mode: Show category selection
+    const allBusinesses = getAllBusinesses();
     
-    if (venues && venues.length > 1) {
-      // Multiple venues - ask user to select one
+    if (allBusinesses.length > 1) {
+      // Multiple businesses - start with category selection
       userState[from] = {
-        step: "choose_venue",
-        venues: venues,
+        step: "choose_category",
       };
       
-      const venueList = venues
-        .map((v: any, idx: number) => `${idx + 1}. ${t.venueOption(v.name, v.address)}`)
-        .join("\n\n");
+      // If user has booking intent, try to detect which category they want
+      if (hasBookingIntent) {
+        const detectedCategory = await detectServiceCategory(text);
+        if (detectedCategory) {
+          // Auto-select category based on their message
+          console.log(`🎯 Auto-detected category: ${detectedCategory}`);
+          userState[from].selectedCategory = detectedCategory;
+          
+          // Get businesses in this category
+          const categoryBusinesses = getBusinessesByCategory(detectedCategory);
+          if (categoryBusinesses.length > 0) {
+            // Set the first business as current (or we could show multiple)
+            const selectedBusiness = categoryBusinesses[0];
+            userState[from].selectedBusinessId = selectedBusiness.id;
+            userState[from].selectedBusinessName = selectedBusiness.name;
+            setCurrentBusiness(selectedBusiness.id);
+            
+            // Load services for this business
+            const services = await getServices(selectedBusiness.id);
+            userState[from].step = "choose_service";
+            userState[from].services = services.data;
+            
+            // Try to parse service + date + time from their message
+            const fullQuery = await parseServiceDateTime(text, services.data);
+            
+            // Continue with existing booking intent flow...
+            if (fullQuery && fullQuery.service) {
+              const chosen = fullQuery.service;
+              userState[from].chosenService = chosen;
+              userState[from].serviceId = chosen.id;
+              
+              // ... (rest of booking intent logic will follow)
+              // For now, just ask for date
+              if (fullQuery.date) {
+                // Handle date+time scenario
+                userState[from].step = "choose_date";
+                return await handleMessage(from, text); // Re-process with updated state
+              } else {
+                userState[from].step = "choose_date";
+                return t.whatDate;
+              }
+            }
+            
+            // Couldn't parse service - show available services
+            const serviceList = services.data
+              .map((s: any) => `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`)
+              .join("\n");
+            
+            const categoryName = getCategoryName(detectedCategory, LANGUAGE as 'en' | 'cs');
+            return `Great! I can help you with ${categoryName} services.\n\n${t.availableServices}\n\n${serviceList}\n\n${t.replyWithService}`;
+          }
+        }
+      }
       
-      return `${t.selectVenue}\n\n${venueList}\n\nReply with the number of your preferred location.`;
+      // Show category selection
+      return `${t.welcomeBridget}\n\n${t.selectCategory}\n${t.categoryHairSalon}\n${t.categoryPhysiotherapy}`;
     }
     
-    // Single venue - proceed normally
+    // Legacy single-business mode (backward compatibility)
     const business = await getBusiness();
     const services = await getServices();
     const businessName = business?.data?.attributes?.name || "our shop";
@@ -1157,7 +1271,54 @@ export async function handleMessage(
     }
   }
 
-  // Step 0 → Choose venue (if multiple locations)
+  // Step 0 → Choose category (multi-business mode)
+  if (state.step === "choose_category") {
+    // Try to detect category from user input
+    let selectedCategory: 'hair_salon' | 'physiotherapy' | null = null;
+    
+    // Check for explicit number selection
+    if (text.trim() === "1" || /hair|salon|kadeř|holič|střih/i.test(text)) {
+      selectedCategory = "hair_salon";
+    } else if (text.trim() === "2" || /physio|therapy|massage|terapie|masáž|rehabilit/i.test(text)) {
+      selectedCategory = "physiotherapy";
+    } else {
+      // Try AI detection
+      selectedCategory = await detectServiceCategory(text);
+    }
+    
+    if (!selectedCategory) {
+      return t.categoryNotUnderstood;
+    }
+    
+    // Category selected - load businesses and services
+    userState[from].selectedCategory = selectedCategory;
+    const categoryBusinesses = getBusinessesByCategory(selectedCategory);
+    
+    if (categoryBusinesses.length === 0) {
+      return "Sorry, we don't have any businesses in that category yet.";
+    }
+    
+    // For now, use the first business in the category
+    // TODO: Later we can aggregate services from multiple businesses
+    const selectedBusiness = categoryBusinesses[0];
+    userState[from].selectedBusinessId = selectedBusiness.id;
+    userState[from].selectedBusinessName = selectedBusiness.name;
+    setCurrentBusiness(selectedBusiness.id);
+    
+    // Load services
+    const services = await getServices(selectedBusiness.id);
+    userState[from].step = "choose_service";
+    userState[from].services = services.data;
+    
+    const categoryName = getCategoryName(selectedCategory, LANGUAGE as 'en' | 'cs');
+    const serviceList = services.data
+      .map((s: any) => `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`)
+      .join("\n");
+    
+    return `Great! Here are the ${categoryName} services available:\n\n${serviceList}\n\n${t.replyWithService}`;
+  }
+
+  // Step 0 → Choose venue (if multiple locations) - LEGACY
   if (state.step === "choose_venue") {
     const venueNumber = parseInt(text.trim());
     const venues = state.venues || [];

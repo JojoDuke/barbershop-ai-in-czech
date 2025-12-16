@@ -3,7 +3,14 @@ export type Language = 'en' | 'cs';
 
 export const translations = {
   en: {
-    // Greeting & Menu
+    // Greeting & Menu - Multi-business
+    welcomeBridget: "Hi, this is Bridget, your AI assistant. I can help you book appointments.\n\nWhat type of service are you looking for?",
+    selectCategory: "Please select a service category:",
+    categoryHairSalon: "1. Hair Salon - haircuts, styling, beard trims, grooming",
+    categoryPhysiotherapy: "2. Physiotherapy - massage, rehabilitation, therapy",
+    categoryNotUnderstood: "I didn't understand that category. Please reply with:\n• '1' or 'hair salon' for hair services\n• '2' or 'physiotherapy' for therapy services",
+    
+    // Original single-business greetings (kept for backward compatibility)
     welcome: (businessName: string) => `Welcome to ${businessName}!`,
     welcomeExplained: (businessName: string) => `Welcome! 👋 I'm your booking assistant for ${businessName}.\n\nI can help you:\n• Check service availability\n• Book appointments\n• Get business information (hours, location, etc.)\n\nLet's get started!`,
     welcomeBack: (name: string, businessName: string) => `Welcome back, ${name}! 👋 Great to see you again at ${businessName}.`,
@@ -92,7 +99,14 @@ export const translations = {
   },
   
   cs: {
-    // Pozdrav & Menu
+    // Pozdrav & Menu - Více obchodů
+    welcomeBridget: "Ahoj, tady je Bridget, váš AI asistent. Mohu vám pomoci s rezervací.\n\nJaký typ služby hledáte?",
+    selectCategory: "Prosím vyberte kategorii služby:",
+    categoryHairSalon: "1. Kadeřnictví - střihy, styling, úprava vousů, péče",
+    categoryPhysiotherapy: "2. Fyzioterapie - masáže, rehabilitace, terapie",
+    categoryNotUnderstood: "Nerozuměl jsem této kategorii. Prosím odpovězte:\n• '1' nebo 'kadeřnictví' pro služby vlasů\n• '2' nebo 'fyzioterapie' pro terapeutické služby",
+    
+    // Původní pozdravy pro jeden obchod (zachováno pro zpětnou kompatibilitu)
     welcome: (businessName: string) => `Vítejte v ${businessName}!`,
     welcomeExplained: (businessName: string) => `Vítejte! 👋 Jsem váš asistent pro rezervace v ${businessName}.\n\nMohu vám pomoci:\n• Zkontrolovat dostupnost služeb\n• Rezervovat termín\n• Získat informace o provozu (otevírací doba, adresa, atd.)\n\nPojďme začít!`,
     welcomeBack: (name: string, businessName: string) => `Vítejte zpět, ${name}! 👋 Těší nás, že jste opět v ${businessName}.`,
