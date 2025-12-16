@@ -11,21 +11,25 @@
 export interface BusinessConfig {
   id: string;
   name: string;
-  category: 'hair_salon' | 'physiotherapy';
+  category: 'barbershop' | 'physiotherapy';
   apiEndpoint: string;
   accessToken: string;
   isLive: boolean; // Flag to indicate this is a real, active business
   description?: string;
+  address?: string; // Display address for business selection
+  isDefault?: boolean; // Default business for direct booking intents (Rico Studio)
 }
 
 export const BUSINESSES: BusinessConfig[] = [
   {
     id: 'd709a085-8c00-4bea-af6c-438e5741521a',
-    name: 'Barbershop',
-    category: 'hair_salon',
+    name: 'Rico Studio', // This is the default/original barbershop
+    category: 'barbershop',
     apiEndpoint: 'https://api.reservio.com/v2/businesses/d709a085-8c00-4bea-af6c-438e5741521a',
     accessToken: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6ImIyYTYzMmM0YWE1ZDRkMzhjMjZhMjkwYTg1YjFlNjIxN2U4OTMwM2U5OTMwODNiMDI1MWJiMTlkMmQxNTQxOTNjZmFhNmM5NGUwZjgzM2Q5In0.eyJhdWQiOiI1ZWI3ODIyZC1iMGNiLTQyZTItYTIwYS1kMTFjNjc4ZjNhM2MiLCJqdGkiOiJiMmE2MzJjNGFhNWQ0ZDM4YzI2YTI5MGE4NWIxZTYyMTdlODkzMDNlOTkzMDgzYjAyNTFiYjE5ZDJkMTU0MTkzY2ZhYTZjOTRlMGY4MzNkOSIsImlhdCI6MTc2NDY1NzA4NCwibmJmIjoxNzY0NjU3MDg0LCJleHAiOjE5MjI0MjM0ODQsInN1YiI6IjE3NDMyMzEiLCJzY29wZXMiOlsiYWRtaW4iXX0.C6LginUEaxF_vkOzIMfO4uaUNFhht4PtJmxjenXUNz_R8_E3xobKqvVPANud-1qSqn2FF67dRf1MSW_ALHae4IhuYUIeZ4stTD7qJAIEiIj4aZtThMi4Eun1ZQ-65vwk1A1FOu8RR8O1kbCNRBNpy6BUh190x74F_sTp6rcNkW4',
     isLive: true,
+    isDefault: true, // Default barbershop for backward compatibility
+    address: 'Prague, Czech Republic', // TODO: Get actual address from API
     description: 'Professional barbershop services including haircuts, beard trims, and styling'
   },
   {
@@ -35,6 +39,7 @@ export const BUSINESSES: BusinessConfig[] = [
     apiEndpoint: 'https://api.reservio.com/v2/businesses/fc376586-8906-4c0a-8cd3-be382a3c4a89',
     accessToken: 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6IjUwNDA5ZGZiMjQ0MTA0YjAwZjIzZjFmNTFlZDJlMjhlNjFlNTA3NmZkZTg4MWVkNzc5MjE2ZTBmMjVlMTJkYTMzNzY4NGRjNzU0NDk4OTQ4In0.eyJhdWQiOiI1ZWI3ODIyZC1iMGNiLTQyZTItYTIwYS1kMTFjNjc4ZjNhM2MiLCJqdGkiOiI1MDQwOWRmYjI0NDEwNGIwMGYyM2YxZjUxZWQyZTI4ZTYxZTUwNzZmZGU4ODFlZDc3OTIxNmUwZjI1ZTEyZGEzMzc2ODRkYzc1NDQ5ODk0OCIsImlhdCI6MTc2Mzk3NDkwOCwibmJmIjoxNzYzOTc0OTA4LCJleHAiOjE5MjE3NDEzMDcsInN1YiI6IjIxMDczMDIiLCJzY29wZXMiOlsiYWRtaW4iXX0.A_814ubc_9Patd_015K0kIDV_CJIBXuX79Uk0d3A0mA7tphs4ZtrqgWgTZphfWTKS_zOXsNKYUUvGLvLr_0mE3ftmtXuUi-WDQcAYhtSz3En_Bx7bDipCgX66ViNi2dVTqaL9Jqya4bKjqPElwSEo4arxX_VPfLdS4Q4peT0ELo',
     isLive: true,
+    address: 'Prague, Czech Republic', // TODO: Get actual address from API
     description: 'Professional physiotherapy services including massage, rehabilitation, and therapy'
   }
 ];
@@ -56,25 +61,34 @@ export function getBusinessById(id: string): BusinessConfig | undefined {
 /**
  * Get businesses by category
  */
-export function getBusinessesByCategory(category: 'hair_salon' | 'physiotherapy'): BusinessConfig[] {
+export function getBusinessesByCategory(category: 'barbershop' | 'physiotherapy'): BusinessConfig[] {
   return BUSINESSES.filter(b => b.category === category);
 }
 
 /**
  * Get all unique categories
  */
-export function getCategories(): Array<'hair_salon' | 'physiotherapy'> {
+export function getCategories(): Array<'barbershop' | 'physiotherapy'> {
   const categories = new Set(BUSINESSES.map(b => b.category));
   return Array.from(categories);
+}
+
+/**
+ * Get default business for a category (used for direct booking intents)
+ */
+export function getDefaultBusiness(category: 'barbershop' | 'physiotherapy'): BusinessConfig | null {
+  const businesses = getBusinessesByCategory(category);
+  const defaultBiz = businesses.find(b => b.isDefault);
+  return defaultBiz || businesses[0] || null;
 }
 
 /**
  * Category display names for user-facing messages
  */
 export const CATEGORY_NAMES: Record<string, { en: string; cs: string; description: string }> = {
-  hair_salon: {
-    en: 'Hair Salon',
-    cs: 'Kadeřnictví',
+  barbershop: {
+    en: 'Barbershop',
+    cs: 'Holičství',
     description: 'Haircuts, styling, beard trims, and grooming services'
   },
   physiotherapy: {

@@ -20,6 +20,7 @@ import {
   getBusinessesByCategory, 
   getCategoryName, 
   getCategoryDescription,
+  getDefaultBusiness,
   type BusinessConfig 
 } from "./businesses.js";
 
@@ -153,15 +154,15 @@ function formatDuration(seconds: number | undefined) {
 }
 
 // AI-powered detection: What category of service is the user looking for?
-async function detectServiceCategory(text: string): Promise<'hair_salon' | 'physiotherapy' | null> {
+async function detectServiceCategory(text: string): Promise<'barbershop' | 'physiotherapy' | null> {
   const systemPrompt = `You are a service category detector. Determine what type of service the user is looking for.
 
 Respond with ONLY one of:
-- "HAIR_SALON" for haircut, styling, beard, barbershop, grooming services
+- "BARBERSHOP" for haircut, styling, beard, barbershop, grooming services
 - "PHYSIOTHERAPY" for massage, therapy, rehabilitation, physical therapy, wellness services
 - "UNCLEAR" if you cannot determine
 
-Examples of HAIR_SALON:
+Examples of BARBERSHOP:
 - "I want a haircut"
 - "Book me for a trim"
 - "I need my beard done"
@@ -177,7 +178,7 @@ Examples of PHYSIOTHERAPY:
 - "masáž" (massage in Czech)
 - "fyzioterapie" (physiotherapy in Czech)
 
-Respond with ONLY "HAIR_SALON", "PHYSIOTHERAPY", or "UNCLEAR".`;
+Respond with ONLY "BARBERSHOP", "PHYSIOTHERAPY", or "UNCLEAR".`;
 
   try {
     const completion = await client.chat.completions.create({
@@ -191,14 +192,14 @@ Respond with ONLY "HAIR_SALON", "PHYSIOTHERAPY", or "UNCLEAR".`;
     });
 
     const response = completion.choices[0].message?.content?.trim().toUpperCase();
-    if (response === "HAIR_SALON") return "hair_salon";
+    if (response === "BARBERSHOP") return "barbershop";
     if (response === "PHYSIOTHERAPY") return "physiotherapy";
     return null;
   } catch (error) {
     console.error("AI category detection error:", error);
     // Fallback to regex
     if (/\b(haircut|hair|trim|cut|beard|fade|style|barber|střih|holič|kadeř)\b/i.test(text)) {
-      return "hair_salon";
+      return "barbershop";
     }
     if (/\b(massage|therapy|physiotherapy|rehabilitation|physical|wellness|masáž|fyzio|terapie|rehabilit)\b/i.test(text)) {
       return "physiotherapy";
@@ -1005,10 +1006,11 @@ export async function handleMessage(
           userState[from].selectedCategory = detectedCategory;
           
           // Get businesses in this category
-          const categoryBusinesses = getBusinessesByCategory(detectedCategory);
-          if (categoryBusinesses.length > 0) {
-            // Set the first business as current (or we could show multiple)
-            const selectedBusiness = categoryBusinesses[0];
+          // For direct booking intents, use the DEFAULT business (Rico Studio for barbershops)
+          const defaultBusiness = getDefaultBusiness(detectedCategory);
+          if (defaultBusiness) {
+            console.log(`🏢 Using default business for direct intent: ${defaultBusiness.name}`);
+            const selectedBusiness = defaultBusiness;
             userState[from].selectedBusinessId = selectedBusiness.id;
             userState[from].selectedBusinessName = selectedBusiness.name;
             setCurrentBusiness(selectedBusiness.id);
@@ -1051,7 +1053,7 @@ export async function handleMessage(
       }
       
       // Show category selection
-      return `${t.welcomeBridget}\n\n${t.selectCategory}\n${t.categoryHairSalon}\n${t.categoryPhysiotherapy}`;
+      return `${t.welcomeBridget}\n\n${t.selectCategory}\n${t.categoryBarbershop}\n${t.categoryPhysiotherapy}`;
     }
     
     // Legacy single-business mode (backward compatibility)
@@ -1274,12 +1276,12 @@ export async function handleMessage(
   // Step 0 → Choose category (multi-business mode)
   if (state.step === "choose_category") {
     // Try to detect category from user input
-    let selectedCategory: 'hair_salon' | 'physiotherapy' | null = null;
+    let selectedCategory: 'barbershop' | 'physiotherapy' | null = null;
     
     // Check for explicit number selection
-    if (text.trim() === "1" || /hair|salon|kadeř|holič|střih/i.test(text)) {
-      selectedCategory = "hair_salon";
-    } else if (text.trim() === "2" || /physio|therapy|massage|terapie|masáž|rehabilit/i.test(text)) {
+    if (text.trim() === "1" || /barber|hair|salon|holič|střih/i.test(text)) {
+      selectedCategory = "barbershop";
+    } else if (text.trim() === "2" || /physio|therapy|massage|terapie|masáž|rehabilit|fyzio/i.test(text)) {
       selectedCategory = "physiotherapy";
     } else {
       // Try AI detection
@@ -1290,7 +1292,7 @@ export async function handleMessage(
       return t.categoryNotUnderstood;
     }
     
-    // Category selected - load businesses and services
+    // Category selected - store it
     userState[from].selectedCategory = selectedCategory;
     const categoryBusinesses = getBusinessesByCategory(selectedCategory);
     
@@ -1298,24 +1300,63 @@ export async function handleMessage(
       return "Sorry, we don't have any businesses in that category yet.";
     }
     
-    // For now, use the first business in the category
-    // TODO: Later we can aggregate services from multiple businesses
-    const selectedBusiness = categoryBusinesses[0];
+    // If only one business in category, select it automatically
+    if (categoryBusinesses.length === 1) {
+      const selectedBusiness = categoryBusinesses[0];
+      userState[from].selectedBusinessId = selectedBusiness.id;
+      userState[from].selectedBusinessName = selectedBusiness.name;
+      setCurrentBusiness(selectedBusiness.id);
+      
+      // Load services
+      const services = await getServices(selectedBusiness.id);
+      userState[from].step = "choose_service";
+      userState[from].services = services.data;
+      
+      const serviceList = services.data
+        .map((s: any) => `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`)
+        .join("\n");
+      
+      return `${serviceList}\n\n${t.replyWithService}`;
+    }
+    
+    // Multiple businesses - show selection (barbershop case)
+    userState[from].step = "choose_business";
+    userState[from].categoryBusinesses = categoryBusinesses;
+    
+    const businessList = categoryBusinesses
+      .map((b: BusinessConfig, idx: number) => `${idx + 1}. ${t.barbershopOption(b.name, b.address || 'Location')}`)
+      .join("\n\n");
+    
+    return `${t.selectBarbershop}\n\n${businessList}`;
+  }
+  
+  // Step 0b → Choose specific business (barbershop selection)
+  if (state.step === "choose_business") {
+    const businesses = state.categoryBusinesses || [];
+    const businessNumber = parseInt(text.trim());
+    
+    if (isNaN(businessNumber) || businessNumber < 1 || businessNumber > businesses.length) {
+      const businessList = businesses
+        .map((b: BusinessConfig, idx: number) => `${idx + 1}. ${t.barbershopOption(b.name, b.address || 'Location')}`)
+        .join("\n\n");
+      return `Please select a valid option (1-${businesses.length}):\n\n${businessList}`;
+    }
+    
+    const selectedBusiness = businesses[businessNumber - 1];
     userState[from].selectedBusinessId = selectedBusiness.id;
     userState[from].selectedBusinessName = selectedBusiness.name;
     setCurrentBusiness(selectedBusiness.id);
     
-    // Load services
+    // Load services for selected business
     const services = await getServices(selectedBusiness.id);
     userState[from].step = "choose_service";
     userState[from].services = services.data;
     
-    const categoryName = getCategoryName(selectedCategory, LANGUAGE as 'en' | 'cs');
     const serviceList = services.data
       .map((s: any) => `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`)
       .join("\n");
     
-    return `Great! Here are the ${categoryName} services available:\n\n${serviceList}\n\n${t.replyWithService}`;
+    return `Great! Here are the services at ${selectedBusiness.name}:\n\n${serviceList}\n\n${t.replyWithService}`;
   }
 
   // Step 0 → Choose venue (if multiple locations) - LEGACY

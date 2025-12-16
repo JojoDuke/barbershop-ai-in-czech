@@ -35,7 +35,7 @@ export interface AggregatedService {
  * Get all services from all businesses in a category
  */
 export async function getServicesForCategory(
-  category: 'hair_salon' | 'physiotherapy'
+  category: 'barbershop' | 'physiotherapy'
 ): Promise<ServiceWithBusiness[]> {
   const businesses = getBusinessesByCategory(category);
   const allServices: ServiceWithBusiness[] = [];
@@ -161,7 +161,7 @@ export async function getAvailabilityAcrossBusinesses(
   for (const businessId of businessIds) {
     try {
       const slotsData = await getAvailableSlots(serviceId, from, to, businessId);
-      const business = getBusinessesByCategory('hair_salon')
+      const business = getBusinessesByCategory('barbershop')
         .concat(getBusinessesByCategory('physiotherapy'))
         .find(b => b.id === businessId);
 

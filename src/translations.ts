@@ -6,9 +6,18 @@ export const translations = {
     // Greeting & Menu - Multi-business
     welcomeBridget: "Hi, this is Bridget, your AI assistant. I can help you book appointments.\n\nWhat type of service are you looking for?",
     selectCategory: "Please select a service category:",
-    categoryHairSalon: "1. Hair Salon - haircuts, styling, beard trims, grooming",
+    categoryBarbershop: "1. Barbershop - haircuts, styling, beard trims, grooming",
     categoryPhysiotherapy: "2. Physiotherapy - massage, rehabilitation, therapy",
-    categoryNotUnderstood: "I didn't understand that category. Please reply with:\n• '1' or 'hair salon' for hair services\n• '2' or 'physiotherapy' for therapy services",
+    categoryNotUnderstood: "I didn't understand that category. Please reply with:\n• '1' or 'barbershop' for barbershop services\n• '2' or 'physiotherapy' for therapy services",
+    
+    // Barbershop selection
+    selectBarbershop: "Which barbershop would you like to book at?",
+    barbershopOption: (name: string, address: string) => `📍 ${name}\n   ${address}`,
+    
+    // Cross-barbershop availability
+    timeNotAvailableOtherShops: (businessName: string, otherBusinesses: string) => 
+      `That time slot isn't available at ${businessName}.\n\nWould you like to:\n1. Choose another time at ${businessName}\n2. Check availability at ${otherBusinesses}`,
+    checkingOtherBarbershop: (businessName: string) => `Let me check availability at ${businessName}...`,
     
     // Original single-business greetings (kept for backward compatibility)
     welcome: (businessName: string) => `Welcome to ${businessName}!`,
@@ -102,9 +111,18 @@ export const translations = {
     // Pozdrav & Menu - Více obchodů
     welcomeBridget: "Ahoj, tady je Bridget, váš AI asistent. Mohu vám pomoci s rezervací.\n\nJaký typ služby hledáte?",
     selectCategory: "Prosím vyberte kategorii služby:",
-    categoryHairSalon: "1. Kadeřnictví - střihy, styling, úprava vousů, péče",
+    categoryBarbershop: "1. Holičství - střihy, styling, úprava vousů, péče",
     categoryPhysiotherapy: "2. Fyzioterapie - masáže, rehabilitace, terapie",
-    categoryNotUnderstood: "Nerozuměl jsem této kategorii. Prosím odpovězte:\n• '1' nebo 'kadeřnictví' pro služby vlasů\n• '2' nebo 'fyzioterapie' pro terapeutické služby",
+    categoryNotUnderstood: "Nerozuměl jsem této kategorii. Prosím odpovězte:\n• '1' nebo 'holičství' pro holičské služby\n• '2' nebo 'fyzioterapie' pro terapeutické služby",
+    
+    // Výběr holičství
+    selectBarbershop: "Ve kterém holičství byste si chtěli rezervovat?",
+    barbershopOption: (name: string, address: string) => `📍 ${name}\n   ${address}`,
+    
+    // Dostupnost v jiných holičstvích
+    timeNotAvailableOtherShops: (businessName: string, otherBusinesses: string) => 
+      `Tento čas není k dispozici v ${businessName}.\n\nChtěli byste:\n1. Vybrat jiný čas v ${businessName}\n2. Zkontrolovat dostupnost v ${otherBusinesses}`,
+    checkingOtherBarbershop: (businessName: string) => `Kontroluji dostupnost v ${businessName}...`,
     
     // Původní pozdravy pro jeden obchod (zachováno pro zpětnou kompatibilitu)
     welcome: (businessName: string) => `Vítejte v ${businessName}!`,

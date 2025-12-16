@@ -7,8 +7,9 @@ interface Session {
   name?: string;
   // Multi-business support
   selectedBusinessId?: string;
-  selectedCategory?: 'hair_salon' | 'physiotherapy';
+  selectedCategory?: 'barbershop' | 'physiotherapy';
   selectedBusinessName?: string;
+  categoryBusinesses?: any[]; // List of businesses in selected category
 }
 
 const sessions: Record<string, Session> = {};
@@ -38,6 +39,6 @@ export function getSelectedBusinessId(user: string): string | undefined {
 /**
  * Get the selected category from a session
  */
-export function getSelectedCategory(user: string): 'hair_salon' | 'physiotherapy' | undefined {
+export function getSelectedCategory(user: string): 'barbershop' | 'physiotherapy' | undefined {
   return sessions[user]?.selectedCategory;
 }
