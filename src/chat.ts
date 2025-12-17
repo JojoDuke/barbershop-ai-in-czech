@@ -321,13 +321,20 @@ async function parseServiceDateTime(
 
   const today = dayjs.tz(dayjs(), BUSINESS_TZ);
   const systemPrompt = `You are a booking request parser. Extract FOUR components from the user's message:
-1. SERVICE - match to one of the available services
+1. SERVICE - match to one of the available services (be VERY lenient with matching - "haircut" should match "Střih", "cut" should match "Střih", etc.)
 2. DATE - extract the date they want
 3. TIME - extract time preference (morning/afternoon/evening) or specific time
 4. TIME CONSTRAINT - detect "after X" or "before X" time specifications
 
 Available services:
 ${serviceList}
+
+IMPORTANT SERVICE MATCHING RULES:
+- "haircut" or "hair cut" or "cut" = "Střih" (service #1)
+- "fade" = "Fade" (service #2)
+- "trim" or "beard" or "beard trim" = "Úprava vousů"
+- Match services LOOSELY - if user says "haircut" and you see "Střih", that's a match!
+- User might type in English, but services might be in Czech - MATCH THEM ANYWAY
 
 TODAY'S DATE: ${today.format("YYYY-MM-DD")} (${today.format("dddd, D MMMM YYYY")})
 
@@ -451,6 +458,97 @@ function filterSlotsByTimeConstraint(
     
     return true;
   });
+}
+
+/**
+ * Cross-shop availability checker
+ * Checks alternative barbershops/businesses for availability when the default shop has no slots
+ * Returns shops with available slots matching the criteria
+ */
+async function checkAlternativeBusinessAvailability(
+  currentBusinessId: string,
+  category: 'barbershop' | 'physiotherapy',
+  serviceName: string,
+  requestedDate: dayjs.Dayjs,
+  timePreference: string | null,
+  timeConstraint: { type: 'after' | 'before', time: string } | null | undefined
+): Promise<{ business: BusinessConfig; service: any; slots: any[] }[]> {
+  const { getAlternativeBusinesses } = await import('./businesses.js');
+  const alternativeBusinesses = getAlternativeBusinesses(currentBusinessId, category);
+  
+  const results: { business: BusinessConfig; service: any; slots: any[] }[] = [];
+  
+  for (const business of alternativeBusinesses) {
+    try {
+      console.log(`🔍 Checking alternative business: ${business.name}`);
+      
+      // Set the context to this business
+      setCurrentBusiness(business.id);
+      
+      // Get services for this business
+      const servicesData = await getServices(business.id);
+      const services = servicesData?.data || [];
+      
+      // Try to match the service by name/synonym
+      const matchedService = await matchServiceBySynonym(serviceName, services);
+      
+      if (!matchedService) {
+        console.log(`  ❌ No matching service found in ${business.name}`);
+        continue;
+      }
+      
+      console.log(`  ✅ Found matching service: ${matchedService.attributes.name}`);
+      
+      // Get slots for this service
+      const dayStart = requestedDate.startOf("day");
+      const dayEnd = requestedDate.endOf("day");
+      const slotsData = await getAvailableSlots(
+        matchedService.id,
+        dayStart.format(),
+        dayEnd.format()
+      );
+      
+      const allSlots = slotsData?.data || [];
+      const now = dayjs();
+      let daySlots = allSlots.filter((slot: any) =>
+        dayjs(slot.attributes.start).isAfter(now)
+      );
+      
+      // Remove duplicates
+      const uniqueSlots = daySlots.filter(
+        (slot: any, index: number, self: any[]) => {
+          return (
+            index ===
+            self.findIndex(
+              (s: any) =>
+                s.attributes.start === slot.attributes.start &&
+                s.attributes.end === slot.attributes.end
+            )
+          );
+        }
+      );
+      daySlots = uniqueSlots;
+      
+      // Filter by time preference and constraints
+      let filteredSlots = filterSlotsByTimePreference(daySlots, timePreference);
+      filteredSlots = filterSlotsByTimeConstraint(filteredSlots, timeConstraint);
+      
+      if (filteredSlots.length > 0) {
+        console.log(`  🎯 Found ${filteredSlots.length} matching slots in ${business.name}`);
+        results.push({
+          business,
+          service: matchedService,
+          slots: filteredSlots
+        });
+      } else {
+        console.log(`  ⏰ No matching time slots in ${business.name}`);
+      }
+    } catch (error) {
+      console.error(`  ❌ Error checking ${business.name}:`, error);
+    }
+  }
+  
+  return results;
 }
 
 // AI-powered service matching with synonyms
@@ -1121,6 +1219,13 @@ export async function handleMessage(
           filteredSlots = filterSlotsByTimeConstraint(filteredSlots, fullQuery.timeConstraint);
           
           if (filteredSlots.length === 0) {
+            // No slots at default business - check alternative businesses
+            const currentBusinessId = userState[from].selectedBusinessId;
+            const currentCategory = userState[from].selectedCategory;
+            const currentBusinessName = userState[from].selectedBusinessName || "Rico Studio";
+            
+            console.log(`❌ No slots found at ${currentBusinessName}, checking alternatives...`);
+            
             let timeDescription = "";
             if (fullQuery.timeConstraint) {
               const timeStr = fullQuery.timeConstraint.time;
@@ -1133,6 +1238,52 @@ export async function handleMessage(
                                 fullQuery.timePreference === "morning" ? "morning" : "";
               timeDescription = timeLabel;
             }
+            
+            // Check alternative businesses if we're in barbershop category
+            if (currentCategory === 'barbershop') {
+              const alternatives = await checkAlternativeBusinessAvailability(
+                currentBusinessId,
+                currentCategory,
+                chosen.attributes.name,
+                requestedDate,
+                fullQuery.timePreference,
+                fullQuery.timeConstraint
+              );
+              
+              if (alternatives.length > 0) {
+                // Found alternatives! Show them
+                console.log(`✅ Found ${alternatives.length} alternative(s) with availability`);
+                
+                let alternativeMessage = `${currentBusinessName} doesn't have ${timeDescription ? timeDescription + ' ' : ''}slots available on ${requestedDate.format("dddd, DD MMMM YYYY")}.\n\n`;
+                alternativeMessage += `But I found availability at:\n\n`;
+                
+                // Store alternatives for user selection
+                userState[from].alternativeOptions = alternatives;
+                userState[from].step = "choose_alternative";
+                userState[from].requestedDate = requestedDate;
+                userState[from].timePreference = fullQuery.timePreference;
+                userState[from].timeConstraint = fullQuery.timeConstraint;
+                
+                alternatives.forEach((alt, idx) => {
+                  const slotList = alt.slots.slice(0, 3)
+                    .map((s: any) => {
+                      const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+                      return startTime.format("h:mm A");
+                    })
+                    .join(", ");
+                  
+                  const moreSlots = alt.slots.length > 3 ? ` (+${alt.slots.length - 3} more)` : '';
+                  alternativeMessage += `${idx + 1}. **${alt.business.name}**\n`;
+                  alternativeMessage += `   ${slotList}${moreSlots}\n\n`;
+                });
+                
+                alternativeMessage += `Reply with the number to see full availability, or say "other times" to see different times at ${currentBusinessName}.`;
+                
+                return alternativeMessage;
+              }
+            }
+            
+            // No alternatives found or not barbershop category
             return `Sorry, there are no slots available ${timeDescription} for ${requestedDate.format("dddd, DD MMMM YYYY")}. Would you like to see all available slots for that day?`;
           }
           
@@ -1300,34 +1451,35 @@ export async function handleMessage(
       return "Sorry, we don't have any businesses in that category yet.";
     }
     
-    // If only one business in category, select it automatically
-    if (categoryBusinesses.length === 1) {
-      const selectedBusiness = categoryBusinesses[0];
-      userState[from].selectedBusinessId = selectedBusiness.id;
-      userState[from].selectedBusinessName = selectedBusiness.name;
-      setCurrentBusiness(selectedBusiness.id);
+    // ALWAYS show business selection for barbershops (even if only 1)
+    // For physiotherapy with single business, skip selection
+    if (selectedCategory === 'barbershop' || categoryBusinesses.length > 1) {
+      userState[from].step = "choose_business";
+      userState[from].categoryBusinesses = categoryBusinesses;
       
-      // Load services
-      const services = await getServices(selectedBusiness.id);
-      userState[from].step = "choose_service";
-      userState[from].services = services.data;
+      const businessList = categoryBusinesses
+        .map((b: BusinessConfig, idx: number) => `${idx + 1}. ${t.barbershopOption(b.name, b.address || 'Location')}`)
+        .join("\n\n");
       
-      const serviceList = services.data
-        .map((s: any) => `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`)
-        .join("\n");
-      
-      return `${serviceList}\n\n${t.replyWithService}`;
+      return `${t.selectBarbershop}\n\n${businessList}`;
     }
     
-    // Multiple businesses - show selection (barbershop case)
-    userState[from].step = "choose_business";
-    userState[from].categoryBusinesses = categoryBusinesses;
+    // Single business in non-barbershop category - select automatically
+    const selectedBusiness = categoryBusinesses[0];
+    userState[from].selectedBusinessId = selectedBusiness.id;
+    userState[from].selectedBusinessName = selectedBusiness.name;
+    setCurrentBusiness(selectedBusiness.id);
     
-    const businessList = categoryBusinesses
-      .map((b: BusinessConfig, idx: number) => `${idx + 1}. ${t.barbershopOption(b.name, b.address || 'Location')}`)
-      .join("\n\n");
+    // Load services
+    const services = await getServices(selectedBusiness.id);
+    userState[from].step = "choose_service";
+    userState[from].services = services.data;
     
-    return `${t.selectBarbershop}\n\n${businessList}`;
+    const serviceList = services.data
+      .map((s: any) => `• ${s.attributes.name} - ${formatDuration(s.attributes.duration)}`)
+      .join("\n");
+    
+    return `${serviceList}\n\n${t.replyWithService}`;
   }
   
   // Step 0b → Choose specific business (barbershop selection)
@@ -1357,6 +1509,56 @@ export async function handleMessage(
       .join("\n");
     
     return `Great! Here are the services at ${selectedBusiness.name}:\n\n${serviceList}\n\n${t.replyWithService}`;
+  }
+  
+  // Step 0c → Choose alternative business (when default business has no slots)
+  if (state.step === "choose_alternative") {
+    const alternatives = state.alternativeOptions || [];
+    
+    // Check if user wants to see other times at the original business
+    if (/other|different|original|rico/i.test(text)) {
+      // Go back to showing all slots for the original business on that date
+      userState[from].step = "choose_date";
+      userState[from].requestedDate = state.requestedDate;
+      return `Sure! Let me show you all available times at ${state.selectedBusinessName || 'the original location'} for ${state.requestedDate.format("dddd, DD MMMM YYYY")}.`;
+    }
+    
+    const altNumber = parseInt(text.trim());
+    
+    if (isNaN(altNumber) || altNumber < 1 || altNumber > alternatives.length) {
+      return `Please select a valid option (1-${alternatives.length}), or say "other times" to see different times.`;
+    }
+    
+    const selectedAlt = alternatives[altNumber - 1];
+    
+    // Switch to the alternative business
+    userState[from].selectedBusinessId = selectedAlt.business.id;
+    userState[from].selectedBusinessName = selectedAlt.business.name;
+    userState[from].chosenService = selectedAlt.service;
+    userState[from].serviceId = selectedAlt.service.id;
+    setCurrentBusiness(selectedAlt.business.id);
+    
+    // Show all available slots from this alternative business
+    const serviceName = selectedAlt.service.attributes?.name || "the selected service";
+    const dateLabel = state.requestedDate.format("D MMMM");
+    const tzName = BUSINESS_TZ;
+    const tzOffset = dayjs().tz(BUSINESS_TZ).format("Z");
+    
+    const slotList = selectedAlt.slots.slice(0, 10)
+      .map((s: any) => {
+        const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+        const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+        return `• ${startTime.format("h:mm A")} - ${endTime.format("h:mm A")}`;
+      })
+      .join("\n");
+    
+    const moreSlots = selectedAlt.slots.length > 10 ? `\n\n(+${selectedAlt.slots.length - 10} more slots available)` : '';
+    
+    userState[from].slots = selectedAlt.slots;
+    userState[from].step = "choose_slot";
+    userState[from].slotPage = 1;
+    
+    return `Great! Here are available times for ${serviceName} at **${selectedAlt.business.name}** on ${dateLabel}:\n\n${slotList}${moreSlots}\n\n${t.replyWithTime}`;
   }
 
   // Step 0 → Choose venue (if multiple locations) - LEGACY
@@ -1427,7 +1629,14 @@ export async function handleMessage(
     }
     
     // Try to parse service + date + time all at once
+    console.log(`🔍 Parsing user input: "${text}"`);
     const fullQuery = await parseServiceDateTime(text, state.services);
+    console.log(`📊 Parse result:`, fullQuery ? { 
+      service: fullQuery.service?.attributes?.name, 
+      date: fullQuery.date?.format('YYYY-MM-DD'),
+      timePreference: fullQuery.timePreference,
+      timeConstraint: fullQuery.timeConstraint 
+    } : 'null');
     
     // Handle full query with all three components (service + date + time preference OR time constraint)
     if (fullQuery && fullQuery.service && fullQuery.date && (fullQuery.timePreference || fullQuery.timeConstraint)) {
@@ -1475,7 +1684,11 @@ export async function handleMessage(
       filteredSlots = filterSlotsByTimeConstraint(filteredSlots, fullQuery.timeConstraint);
 
       if (filteredSlots.length === 0) {
-        // No slots match the time specification
+        // No slots match the time specification - check alternatives
+        const currentBusinessId = userState[from].selectedBusinessId;
+        const currentCategory = userState[from].selectedCategory;
+        const currentBusinessName = userState[from].selectedBusinessName;
+        
         let timeDescription = "";
         if (fullQuery.timeConstraint) {
           const timeStr = fullQuery.timeConstraint.time;
@@ -1491,6 +1704,51 @@ export async function handleMessage(
                             fullQuery.timePreference === "morning" ? "morning" : "";
           timeDescription = timeLabel;
         }
+        
+        // Check alternative businesses if we're in barbershop category
+        if (currentBusinessId && currentCategory === 'barbershop') {
+          console.log(`❌ No slots at ${currentBusinessName}, checking alternatives...`);
+          
+          const alternatives = await checkAlternativeBusinessAvailability(
+            currentBusinessId,
+            currentCategory,
+            chosen.attributes.name,
+            requestedDate,
+            fullQuery.timePreference,
+            fullQuery.timeConstraint
+          );
+          
+          if (alternatives.length > 0) {
+            console.log(`✅ Found ${alternatives.length} alternative(s) with availability`);
+            
+            let alternativeMessage = `${currentBusinessName || 'The selected location'} doesn't have ${timeDescription ? timeDescription + ' ' : ''}slots available on ${requestedDate.format("dddd, DD MMMM YYYY")}.\n\n`;
+            alternativeMessage += `But I found availability at:\n\n`;
+            
+            userState[from].alternativeOptions = alternatives;
+            userState[from].step = "choose_alternative";
+            userState[from].requestedDate = requestedDate;
+            userState[from].timePreference = fullQuery.timePreference;
+            userState[from].timeConstraint = fullQuery.timeConstraint;
+            
+            alternatives.forEach((alt, idx) => {
+              const slotList = alt.slots.slice(0, 3)
+                .map((s: any) => {
+                  const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+                  return startTime.format("h:mm A");
+                })
+                .join(", ");
+              
+              const moreSlots = alt.slots.length > 3 ? ` (+${alt.slots.length - 3} more)` : '';
+              alternativeMessage += `${idx + 1}. **${alt.business.name}**\n`;
+              alternativeMessage += `   ${slotList}${moreSlots}\n\n`;
+            });
+            
+            alternativeMessage += `Reply with the number to see full availability, or say "other times" to see different times${currentBusinessName ? ' at ' + currentBusinessName : ''}.`;
+            
+            return alternativeMessage;
+          }
+        }
+        
         return `Sorry, there are no slots available ${timeDescription} for ${requestedDate.format("dddd, DD MMMM YYYY")}. Would you like to see all available slots for that day?`;
       }
 

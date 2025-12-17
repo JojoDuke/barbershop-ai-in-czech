@@ -189,7 +189,40 @@ The bot now intelligently detects when you want to book right from your first me
 - `Book me for a trim tomorrow morning` → Skips greeting, shows morning slots for tomorrow
 - `chci si zarezervovat střih` (Czech) → Skips greeting, asks for date
 
-#### ✅ Test 1c: Time Constraints - "After X" / "Before X" (NEW)
+#### ✅ Test 1c: Cross-Shop Availability Checking (NEW - Option 2 Implementation)
+**Scenario:** When Rico Studio doesn't have the requested time slot, the bot automatically checks other barbershops.
+
+**Send:** `I want haircut today in the afternoon` (assuming Rico Studio has no afternoon slots)
+
+**Expected:**
+- Bot checks Rico Studio first (the default)
+- If no afternoon slots at Rico Studio, bot automatically checks Holičství 21
+- Bot shows message: "Rico Studio doesn't have afternoon slots available on [date]. But I found availability at:"
+- Lists alternative barbershop(s) with their available slots:
+  ```
+  1. **Holičství 21**
+     2:00 PM, 3:30 PM, 4:00 PM (+2 more)
+  ```
+- Bot asks: "Reply with the number to see full availability, or say 'other times' to see different times at Rico Studio."
+
+**Test User Selections:**
+1. **Select alternative shop:** Reply `1`
+   - Expected: Shows full list of slots from Holičství 21
+   - User can select a time and complete booking at that shop
+   
+2. **Request other times at original shop:** Reply `other times`
+   - Expected: Shows all available slots at Rico Studio for that day (not just afternoon)
+
+**Edge Cases:**
+- If NO barbershops have the requested time → Shows regular "no slots available" message
+- Works for both direct booking intents and regular flow
+- Maintains context of which shop user ultimately books at
+
+**Test variations:**
+- `I want haircut on Monday morning` (if Rico Studio closed mornings)
+- `Book me for a fade tomorrow after 5pm` (if only one shop has evening slots)
+
+#### ✅ Test 1d: Time Constraints - "After X" / "Before X"
 **Send:** `I want to get a haircut on Friday, after 3pm`
 
 **Expected:**
@@ -494,6 +527,51 @@ John Doe, john@example.com
 yes
 ```
 
+### Cross-Shop Availability Checking (NEW - Option 2)
+Test when default shop has no availability:
+
+**Scenario 1: Automatic alternative suggestion**
+```
+I want a haircut today in the afternoon
+[Bot checks Rico Studio - finds no afternoon slots]
+[Bot automatically checks Holičství 21]
+[Bot shows: "Rico Studio doesn't have afternoon slots available on [date]. But I found availability at:
+1. **Holičství 21**
+   2:00 PM, 3:30 PM, 4:00 PM (+2 more)
+
+Reply with the number to see full availability, or say 'other times' to see different times at Rico Studio."]
+```
+
+**User selects alternative shop:**
+```
+1
+[Bot shows all afternoon slots from Holičství 21]
+2:00 PM
+John Doe, john@example.com
+yes
+[Booking created at Holičství 21]
+```
+
+**User wants other times at original shop:**
+```
+other times
+[Bot shows ALL available times at Rico Studio, not just afternoon]
+10:00 AM
+John Doe, john@example.com
+yes
+[Booking created at Rico Studio]
+```
+
+**Scenario 2: Works in guided flow too**
+```
+hi
+1 (select Barbershop)
+1 (select Holičství 21)
+Střih
+tomorrow after 6pm
+[If Holičství 21 has no evening slots, bot automatically checks Rico Studio]
+```
+
 ## 🧪 READ-ONLY MODE Testing Checklist
 
 Before testing with LIVE bookings:
@@ -508,15 +586,22 @@ Before testing with LIVE bookings:
 
 ## 📊 Multi-Business Testing Checklist
 
-- [ ] Category selection shows both Hair Salon and Physiotherapy
+- [ ] Category selection shows both Barbershop and Physiotherapy
 - [ ] Can select category by number (1, 2)
-- [ ] Can select category by name (hair salon, physiotherapy)
+- [ ] Can select category by name (barbershop, physiotherapy)
 - [ ] Auto-detection works for "I want a haircut"
 - [ ] Auto-detection works for "I need a massage"
-- [ ] Services load correctly for each category
+- [ ] Barbershop selection shows both Rico Studio and Holičství 21
+- [ ] Services load correctly for each barbershop
 - [ ] Availability checking works for each business
+- [ ] **Cross-shop checking: When one shop has no slots, bot suggests alternatives**
+- [ ] **Cross-shop checking: User can select alternative shop and book there**
+- [ ] **Cross-shop checking: User can request other times at original shop**
+- [ ] **Cross-shop checking: Works for direct booking intents**
+- [ ] **Cross-shop checking: Only checks barbershops within same category**
 - [ ] Bookings track correct business context
 - [ ] Console logs show which business is being used
+- [ ] Console logs show cross-shop checking when triggered
 
 ## 🔧 Troubleshooting Multi-Business Issues
 
