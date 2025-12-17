@@ -1111,6 +1111,7 @@ export async function handleMessage(
             const selectedBusiness = defaultBusiness;
             userState[from].selectedBusinessId = selectedBusiness.id;
             userState[from].selectedBusinessName = selectedBusiness.name;
+            userState[from].isDirectBookingIntent = true; // Mark as direct booking
             setCurrentBusiness(selectedBusiness.id);
             
             // Load services for this business
@@ -1127,13 +1128,138 @@ export async function handleMessage(
               userState[from].chosenService = chosen;
               userState[from].serviceId = chosen.id;
               
-              // ... (rest of booking intent logic will follow)
-              // For now, just ask for date
-              if (fullQuery.date) {
-                // Handle date+time scenario
+              // If they provided date + time preference, fetch slots immediately
+              if (fullQuery.date && (fullQuery.timePreference || fullQuery.timeConstraint)) {
+                const requestedDate = fullQuery.date;
+                const dayStart = requestedDate.startOf("day");
+                const dayEnd = requestedDate.endOf("day");
+                const slotsData = await getAvailableSlots(
+                  chosen.id,
+                  dayStart.format(),
+                  dayEnd.format()
+                );
+                const allSlots = slotsData?.data || [];
+                const now = dayjs();
+                let daySlots = allSlots.filter((slot: any) =>
+                  dayjs(slot.attributes.start).isAfter(now)
+                );
+                
+                // Remove duplicates
+                const uniqueSlots = daySlots.filter(
+                  (slot: any, index: number, self: any[]) => {
+                    return (
+                      index ===
+                      self.findIndex(
+                        (s: any) =>
+                          s.attributes.start === slot.attributes.start &&
+                          s.attributes.end === slot.attributes.end
+                      )
+                    );
+                  }
+                );
+                daySlots = uniqueSlots;
+                
+                // Filter by time preference
+                let filteredSlots = filterSlotsByTimePreference(daySlots, fullQuery.timePreference);
+                
+                // Also filter by time constraint (after X, before X)
+                filteredSlots = filterSlotsByTimeConstraint(filteredSlots, fullQuery.timeConstraint);
+                
+                if (filteredSlots.length === 0) {
+                  // No slots - run cross-shop checking
+                  const currentBusinessId = selectedBusiness.id;
+                  const currentCategory = detectedCategory;
+                  const currentBusinessName = selectedBusiness.name;
+                  
+                  console.log(`❌ No slots found at ${currentBusinessName}, checking alternatives...`);
+                  
+                  let timeDescription = "";
+                  if (fullQuery.timeConstraint) {
+                    const timeStr = fullQuery.timeConstraint.time;
+                    timeDescription = fullQuery.timeConstraint.type === 'after' 
+                      ? `after ${timeStr}` 
+                      : `before ${timeStr}`;
+                  } else if (fullQuery.timePreference) {
+                    const timeLabel = fullQuery.timePreference === "evening" ? "evening" :
+                                      fullQuery.timePreference === "afternoon" ? "afternoon" :
+                                      fullQuery.timePreference === "morning" ? "morning" : "";
+                    timeDescription = timeLabel;
+                  }
+                  
+                  // Check alternative businesses if we're in barbershop category
+                  if (currentCategory === 'barbershop') {
+                    const alternatives = await checkAlternativeBusinessAvailability(
+                      currentBusinessId,
+                      currentCategory,
+                      chosen.attributes.name,
+                      requestedDate,
+                      fullQuery.timePreference,
+                      fullQuery.timeConstraint
+                    );
+                    
+                    if (alternatives.length > 0) {
+                      console.log(`✅ Found ${alternatives.length} alternative(s) with availability`);
+                      
+                      let alternativeMessage = `${currentBusinessName} doesn't have ${timeDescription ? timeDescription + ' ' : ''}slots available on ${requestedDate.format("dddd, DD MMMM YYYY")}.\n\n`;
+                      alternativeMessage += `But I found availability at:\n\n`;
+                      
+                      userState[from].alternativeOptions = alternatives;
+                      userState[from].step = "choose_alternative";
+                      userState[from].requestedDate = requestedDate;
+                      userState[from].timePreference = fullQuery.timePreference;
+                      userState[from].timeConstraint = fullQuery.timeConstraint;
+                      
+                      alternatives.forEach((alt, idx) => {
+                        const slotList = alt.slots.slice(0, 3)
+                          .map((s: any) => {
+                            const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+                            return startTime.format("h:mm A");
+                          })
+                          .join(", ");
+                        
+                        const moreSlots = alt.slots.length > 3 ? ` (+${alt.slots.length - 3} more)` : '';
+                        alternativeMessage += `${idx + 1}. **${alt.business.name}**\n`;
+                        alternativeMessage += `   ${slotList}${moreSlots}\n\n`;
+                      });
+                      
+                      alternativeMessage += `Reply with the number to see full availability, or say "other times" to see different times at ${currentBusinessName}.`;
+                      
+                      return alternativeMessage;
+                    }
+                  }
+                  
+                  // No alternatives found
+                  return `Sorry, there are no slots available ${timeDescription} for ${requestedDate.format("dddd, DD MMMM YYYY")}. Would you like to see all available slots for that day?`;
+                }
+                
+                // Show slots
+                const serviceName = chosen.attributes?.name || "the selected service";
+                const dateLabel = requestedDate.format("D MMMM");
+                const tzName = BUSINESS_TZ;
+                const tzOffset = dayjs().tz(BUSINESS_TZ).format("Z");
+                
+                const slotList = filteredSlots.slice(0, 10)
+                  .map((s: any) => {
+                    const startTime = dayjs(s.attributes.start).tz(BUSINESS_TZ);
+                    const endTime = dayjs(s.attributes.end).tz(BUSINESS_TZ);
+                    return `• ${startTime.format("h:mm A")} - ${endTime.format("h:mm A")}`;
+                  })
+                  .join("\n");
+                
+                userState[from].slots = filteredSlots;
+                userState[from].step = "choose_slot";
+                userState[from].slotPage = 1;
+                
+                const timeConstraintDesc = formatTimeConstraintDescription(fullQuery.timeConstraint);
+                return `${t.slotsAvailableFor(serviceName, dateLabel, tzName, tzOffset, timeConstraintDesc)}\n${slotList}\n\n${t.replyWithTime}`;
+              }
+              // Just date, no time preference
+              else if (fullQuery.date) {
                 userState[from].step = "choose_date";
-                return await handleMessage(from, text); // Re-process with updated state
-              } else {
+                return await handleMessage(from, fullQuery.date.format("YYYY-MM-DD"));
+              } 
+              // Just service, ask for date
+              else {
                 userState[from].step = "choose_date";
                 return t.whatDate;
               }
@@ -1451,9 +1577,13 @@ export async function handleMessage(
       return "Sorry, we don't have any businesses in that category yet.";
     }
     
+    // Check if this is a direct booking intent (already has business selected)
+    const isDirectIntent = userState[from].isDirectBookingIntent;
+    
     // ALWAYS show business selection for barbershops (even if only 1)
+    // UNLESS it's a direct booking intent that already selected the default business
     // For physiotherapy with single business, skip selection
-    if (selectedCategory === 'barbershop' || categoryBusinesses.length > 1) {
+    if (!isDirectIntent && (selectedCategory === 'barbershop' || categoryBusinesses.length > 1)) {
       userState[from].step = "choose_business";
       userState[from].categoryBusinesses = categoryBusinesses;
       
